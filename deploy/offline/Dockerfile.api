@@ -1,0 +1,16 @@
+# 由联网制品构建环境构建；目标离线环境只加载已校验镜像。
+ARG PYTHON_BASE
+FROM ${PYTHON_BASE}
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY backend/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    && groupadd --system wellspring && useradd --system --gid wellspring --no-create-home wellspring
+COPY backend/wellspring ./wellspring
+COPY backend/migrations ./migrations
+COPY backend/alembic.ini ./alembic.ini
+COPY deploy/offline/runtime.py ./runtime.py
+USER wellspring
+EXPOSE 8000
+ENTRYPOINT ["python", "runtime.py"]
+CMD ["api"]

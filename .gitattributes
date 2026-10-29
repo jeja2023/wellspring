@@ -1,0 +1,6 @@
+# 离线 Linux 部署文件统一使用 LF。
+*.sh text eol=lf
+Dockerfile* text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.png binary

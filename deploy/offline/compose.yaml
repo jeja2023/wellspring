@@ -1,0 +1,83 @@
+name: wellspring
+services:
+  db:
+    image: ${POSTGRES_IMAGE:?请在环境文件中设置已核验的 POSTGRES_IMAGE}
+    pull_policy: never
+    environment:
+      POSTGRES_USER: wellspring_owner
+      POSTGRES_DB: wellspring
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_owner_password
+    secrets:
+      - db_owner_password
+      - runtime_password
+    volumes:
+      - wellspring_db:/var/lib/postgresql/data
+      - ./init-runtime-role.sh:/docker-entrypoint-initdb.d/10-runtime-role.sh:ro
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wellspring_owner -d wellspring"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+  migrate:
+    image: ${API_IMAGE:-wellspring/api:0.0.2}
+    pull_policy: never
+    profiles: [tools]
+    command: ["migrate"]
+    environment:
+      DB_USER: wellspring_owner
+      DB_PASSWORD_FILE: /run/secrets/db_owner_password
+    secrets: [db_owner_password]
+    networks: [backend]
+    depends_on:
+      db: { condition: service_healthy }
+    restart: "no"
+  bootstrap:
+    image: ${API_IMAGE:-wellspring/api:0.0.2}
+    pull_policy: never
+    profiles: [tools]
+    command: ["bootstrap"]
+    environment:
+      DB_USER: wellspring_app
+      DB_PASSWORD_FILE: /run/secrets/runtime_password
+    secrets: [runtime_password]
+    networks: [backend]
+    depends_on:
+      db: { condition: service_healthy }
+    restart: "no"
+  api:
+    image: ${API_IMAGE:-wellspring/api:0.0.2}
+    pull_policy: never
+    environment:
+      DB_USER: wellspring_app
+      DB_PASSWORD_FILE: /run/secrets/runtime_password
+    secrets: [runtime_password]
+    networks: [backend]
+    depends_on:
+      db: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.2:8000/api/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+  web:
+    image: ${WEB_IMAGE:-wellspring/web:0.0.2}
+    pull_policy: never
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.2}:${HTTP_PORT:-8080}:80"
+    networks: [backend]
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+networks:
+  backend:
+    internal: true
+volumes:
+  wellspring_db:
+secrets:
+  db_owner_password:
+    file: ${SECRETS_DIR:?请指定密钥目录}/db_owner_password
+  runtime_password:
+    file: ${SECRETS_DIR:?请指定密钥目录}/runtime_password
