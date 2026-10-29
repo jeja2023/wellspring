@@ -274,3 +274,22 @@ test('待复核请求失败不会显示陈旧结果，退出清理队列', async
     workspace.intelligence.reset();assert.equal(workspace.intelligence.reviewError.value,'')
   } finally {globalThis.fetch=original}
 })
+
+
+test('盘点差异调查重试和复核提示不会声称余额调整', async () => {
+  const original=globalThis.fetch;const writes=[]
+  try {
+    globalThis.fetch=async (url,options)=>{
+      if(options?.method==='POST'){writes.push({url:String(url),body:JSON.parse(options.body),key:new Headers(options.headers).get('Idempotency-Key')});return ok({id:'i',status:'OPEN',version:1})}
+      if(String(url).includes('/investigation?'))return ok({investigation:{id:'i',observation_id:'o',status:'OPEN',investigator_id:'u',last_submitter_id:null,version:1},events:{items:[],total:0,has_more:false}})
+      return ok({items:[],total:0,has_more:false})
+    }
+    const workspace=createWorkspace();workspace.inventory.selectedObservation.value={id:'o',book_weight:'83',observed_weight:'82.9',difference:'-0.1',note:'盘点',actor_id:'u',evidence_version:1,created_at:'2026-10-29T00:00:00Z'}
+    workspace.inventory.investigationNote.value='调查启动';await workspace.inventory.startInvestigation()
+    assert.equal(writes[0].url,'/api/evidence/inventory-observations/o/investigation')
+    assert.match(workspace.notice.value,/余额未改变/)
+    workspace.inventory.investigationNote.value='调查说明';await workspace.inventory.transitionInvestigation('SUBMIT')
+    assert.deepEqual(writes[1].body,{version:1,action:'SUBMIT',note:'调查说明'})
+    assert.match(workspace.notice.value,/未调整账面余额/)
+  } finally {globalThis.fetch=original}
+})

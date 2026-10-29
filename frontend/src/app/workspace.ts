@@ -17,7 +17,7 @@ const search = ref(''), caseQuery = ref(''), casePage = ref(1), caseTotal = ref(
 const evidenceCase = ref(''), label = ref(''), weight = ref(''), reason = ref('')
 const sampleLabel = ref(''), sampleWeight = ref(''), sampleReason = ref('')
 const pendingKeys = new Map<string, { key: string; path: string; body: string }>()
-const menu = ['工作台','案件管理','证物管理','情报线索','人员档案','数据导入','权限与审计','AI 文书解析']
+const menu = ['工作台','案件管理','证物管理','情报线索','人员档案','数据导入','权限审计','智能解析']
 const selectedItem = computed(() => evidence.value.find(x => x.id === selected.value))
 async function api(path: string, options: RequestInit = {}) { return request(path, token.value, options) }
 async function run(fn: () => Promise<void>) { error.value=''; notice.value=''; loading.value=true; try { await fn() } catch(e) { error.value = e instanceof Error ? e.message : '请求失败' } finally { loading.value=false } }
@@ -71,7 +71,7 @@ const intelligence = createIntelligence({token, username, notice, error, run, co
 const inventory = createInventory({token,selected,selectedItem,notice,error,run,command,refreshEvidence:loadEvidence})
 const persons = createPersons({token,notice,error,run,command})
 const filteredCases = computed(()=>cases.value)
-return { intelligence, inventory, persons, command, run, token, username, password, organization, page, error, notice, loading, cases, evidence, events, selected, search, caseQuery, casePage, caseTotal, evidencePage, evidenceTotal, eventPage, eventTotal, caseNumber, caseTitle, evidenceCase, label, weight, reason, sampleLabel, sampleWeight, sampleReason, menu, selectedItem, filteredCases, login, logout, makeCase, makeEvidence, viewEvents, makeSample, searchCases, moveCase, moveEvidence, moveEvents }
+return { intelligence, inventory, persons, command, run, refreshEvidence:loadEvidence, token, username, password, organization, page, error, notice, loading, cases, evidence, events, selected, search, caseQuery, casePage, caseTotal, evidencePage, evidenceTotal, eventPage, eventTotal, caseNumber, caseTitle, evidenceCase, label, weight, reason, sampleLabel, sampleWeight, sampleReason, menu, selectedItem, filteredCases, login, logout, makeCase, makeEvidence, viewEvents, makeSample, searchCases, moveCase, moveEvidence, moveEvents }
 }
 
 type Workspace = ReturnType<typeof createWorkspace>

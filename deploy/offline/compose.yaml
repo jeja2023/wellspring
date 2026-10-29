@@ -21,7 +21,7 @@ services:
       retries: 20
     restart: unless-stopped
   migrate:
-    image: ${API_IMAGE:-wellspring/api:0.0.3}
+    image: ${API_IMAGE:-wellspring/api:0.0.4}
     pull_policy: never
     profiles: [tools]
     command: ["migrate"]
@@ -34,7 +34,7 @@ services:
       db: { condition: service_healthy }
     restart: "no"
   bootstrap:
-    image: ${API_IMAGE:-wellspring/api:0.0.3}
+    image: ${API_IMAGE:-wellspring/api:0.0.4}
     pull_policy: never
     profiles: [tools]
     command: ["bootstrap"]
@@ -47,7 +47,7 @@ services:
       db: { condition: service_healthy }
     restart: "no"
   api:
-    image: ${API_IMAGE:-wellspring/api:0.0.3}
+    image: ${API_IMAGE:-wellspring/api:0.0.4}
     pull_policy: never
     environment:
       DB_USER: wellspring_app
@@ -63,7 +63,7 @@ services:
       retries: 6
     restart: unless-stopped
   web:
-    image: ${WEB_IMAGE:-wellspring/web:0.0.3}
+    image: ${WEB_IMAGE:-wellspring/web:0.0.4}
     pull_policy: never
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8080}:80"

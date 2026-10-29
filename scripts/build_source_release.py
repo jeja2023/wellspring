@@ -7,7 +7,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXED = ["README.md", "更新日志.md", "清源·禁毒全流程协同平台v2.5.0.md", "效果图.png", "start.py", ".gitignore", ".gitattributes", ".dockerignore", "backend/alembic.ini", "backend/requirements.txt", "backend/requirements-dev.txt", "frontend/package.json", "frontend/package-lock.json", "frontend/index.html", "frontend/tsconfig.json", "frontend/vite.config.ts"]
-TREES = {"backend/wellspring": {".py"}, "backend/migrations": {".py"}, "backend/tests": {".py"}, "frontend/src": {".ts", ".vue", ".css"}, "frontend/tests": {".mjs"}, "docs": {".md"}, "deploy/offline": {".py", ".sh", ".yaml", ".md", ".conf"}, ".github/workflows": {".yml"}, "scripts": {".py"}}
+TREES = {"backend/wellspring": {".py"}, "backend/migrations": {".py"}, "backend/tests": {".py"}, "frontend/src": {".ts", ".vue", ".css", ".svg"}, "frontend/tests": {".mjs"}, "docs": {".md"}, "deploy/offline": {".py", ".sh", ".yaml", ".md", ".conf"}, ".github/workflows": {".yml"}, "scripts": {".py"}}
 EXTRA = ["deploy/offline/Dockerfile.api", "deploy/offline/Dockerfile.web", "deploy/offline/env.example"]
 
 

@@ -231,3 +231,92 @@ class PersonCaseCandidateEvent(Base):
     action: Mapped[str] = mapped_column(String(30))
     note: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class InventoryInvestigation(Base):
+    __tablename__ = "inventory_investigations"
+    __table_args__ = (UniqueConstraint("observation_id", name="uq_inventory_investigation_observation"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
+    observation_id: Mapped[str] = mapped_column(ForeignKey("evidence_inventory_observations.id"), index=True)
+    status: Mapped[str] = mapped_column(String(30), default="OPEN")
+    investigator_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    last_submitter_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+class InventoryInvestigationEvent(Base):
+    __tablename__ = "inventory_investigation_events"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
+    investigation_id: Mapped[str] = mapped_column(ForeignKey("inventory_investigations.id"), index=True)
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    action: Mapped[str] = mapped_column(String(30))
+    before_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    after_status: Mapped[str] = mapped_column(String(30))
+    note: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class CaseImportBatch(Base):
+    __tablename__ = "case_import_batches"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    source: Mapped[str] = mapped_column(String(200))
+    digest: Mapped[str] = mapped_column(String(64))
+    mapping_version: Mapped[str] = mapped_column(String(30))
+    status: Mapped[str] = mapped_column(String(30))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+class CaseImportRow(Base):
+    __tablename__ = "case_import_rows"
+    __table_args__ = (UniqueConstraint("batch_id", "line_number", name="uq_case_import_batch_line"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    batch_id: Mapped[str] = mapped_column(ForeignKey("case_import_batches.id"), index=True)
+    line_number: Mapped[int] = mapped_column(Integer)
+    number: Mapped[str] = mapped_column(String(80))
+    title: Mapped[str] = mapped_column(String(200))
+    preview_status: Mapped[str] = mapped_column(String(30))
+    result_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    reason: Mapped[str] = mapped_column(Text)
+    case_id: Mapped[str | None] = mapped_column(ForeignKey("cases.id"), nullable=True)
+
+
+class EvidenceCustody(Base):
+    __tablename__ = "evidence_custody"
+    __table_args__ = (UniqueConstraint("evidence_id", name="uq_evidence_custody_evidence"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
+    evidence_id: Mapped[str] = mapped_column(ForeignKey("evidence.id"), index=True)
+    custodian_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+class CustodyHandover(Base):
+    __tablename__ = "custody_handovers"
+    __table_args__ = (Index("uq_custody_handover_pending", "evidence_id", unique=True, sqlite_where=text("status = 'PENDING'"), postgresql_where=text("status = 'PENDING'")),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
+    evidence_id: Mapped[str] = mapped_column(ForeignKey("evidence.id"), index=True)
+    from_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    to_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    custody_version: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), default="PENDING")
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    note: Mapped[str] = mapped_column(Text)
+    response_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+class CustodyEvent(Base):
+    __tablename__ = "custody_events"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
+    evidence_id: Mapped[str] = mapped_column(ForeignKey("evidence.id"), index=True)
+    handover_id: Mapped[str | None] = mapped_column(ForeignKey("custody_handovers.id"), nullable=True)
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    action: Mapped[str] = mapped_column(String(30))
+    note: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

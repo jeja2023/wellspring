@@ -31,6 +31,8 @@ def main():
             connection.execute(text("REVOKE UPDATE, DELETE ON TABLE evidence_inventory_observations FROM wellspring_app"))
             connection.execute(text("REVOKE UPDATE, DELETE ON TABLE case_relation_events FROM wellspring_app"))
             connection.execute(text("REVOKE UPDATE, DELETE ON TABLE person_case_candidate_events FROM wellspring_app"))
+            connection.execute(text("REVOKE UPDATE, DELETE ON TABLE inventory_investigation_events FROM wellspring_app"))
+            connection.execute(text("REVOKE UPDATE, DELETE ON TABLE custody_events FROM wellspring_app"))
             connection.execute(text("GRANT DELETE ON TABLE sessions TO wellspring_app"))
         engine.dispose()
         return

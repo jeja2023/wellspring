@@ -22,7 +22,7 @@ from .db import get_db
 from .models import Audit, Case, Evidence, IdempotencyRecord, Organization, Session, User, WeightEvent
 from .security import current_user, new_token, token_hash, verify_password
 
-app = FastAPI(title="清源开发验证 API", version="0.0.3")
+app = FastAPI(title="清源开发验证 API", version="0.0.4")
 
 class Login(BaseModel):
     username: str = Field(min_length=1, max_length=80)
@@ -389,3 +389,15 @@ app.include_router(create_case_relations_router(api_error, audit, reserve_idempo
 
 from .person_case_candidates import create_router as create_person_case_candidates_router
 app.include_router(create_person_case_candidates_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
+
+from .inventory_investigations import create_router as create_inventory_investigations_router
+app.include_router(create_inventory_investigations_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
+
+from .development_tools import create_router as create_development_tools_router
+app.include_router(create_development_tools_router(api_error, audit, page_result, request_id))
+
+from .case_imports import create_router as create_case_imports_router
+app.include_router(create_case_imports_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
+
+from .evidence_custody import create_router as create_evidence_custody_router
+app.include_router(create_evidence_custody_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))

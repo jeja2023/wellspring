@@ -47,7 +47,7 @@ def main():
     if not re.search(r"\b17\.", version):
         raise SystemExit("此部署包只支持 PostgreSQL 17，请选择已审核的 17 系列镜像")
     output.mkdir(parents=True)
-    api, web, db = "wellspring/api:0.0.3", "wellspring/web:0.0.3", "wellspring/postgres:17-offline"
+    api, web, db = "wellspring/api:0.0.4", "wellspring/web:0.0.4", "wellspring/postgres:17-offline"
     subprocess.run(["docker", "build", "--file", str(HERE / "Dockerfile.api"), "--build-arg", f"PYTHON_BASE={args.python_base}", "--tag", api, str(ROOT)], check=True)
     subprocess.run(["docker", "build", "--file", str(HERE / "Dockerfile.web"), "--build-arg", f"NODE_BASE={args.node_base}", "--build-arg", f"NGINX_BASE={args.nginx_base}", "--tag", web, str(ROOT)], check=True)
     docker("tag", args.postgres, db)
