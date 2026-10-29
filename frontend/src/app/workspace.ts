@@ -2,6 +2,8 @@ import { computed, ref, inject, provide, type InjectionKey } from 'vue'
 import { ApiError, request } from '../shared/api/client'
 import { newIdempotencyKey } from '../shared/api/idempotency'
 import { createIntelligence } from '../features/intelligence/controller'
+import { createInventory } from '../features/evidence/inventory'
+import { createPersons } from '../features/persons/controller'
 
 export function createWorkspace() {
 type Case = { id: string; number: string; title: string; status: string }
@@ -49,7 +51,7 @@ async function command(name: string, path: string, data: unknown) {
 }
 async function searchCases() { await run(async()=>{casePage.value=1;caseQuery.value=search.value;evidenceCase.value='';await loadCases()}) }
 async function moveCase(delta: number) { await run(async()=>{casePage.value+=delta;evidenceCase.value='';await loadCases()}) }
-async function moveEvidence(delta: number) { await run(async()=>{evidencePage.value+=delta;selected.value='';events.value=[];await loadEvidence()}) }
+async function moveEvidence(delta: number) { await run(async()=>{evidencePage.value+=delta;selected.value='';events.value=[];inventory.reset();await loadEvidence()}) }
 async function moveEvents(delta: number) { await run(async()=>{eventPage.value+=delta;await loadEvents()}) }
 async function login() { await run(async()=>{ const result=await api('/login',{method:'POST',body:JSON.stringify({username:username.value,password:password.value})}); token.value=result.token; organization.value=result.organization; password.value=''; await refresh() }) }
 async function logout() { await run(async()=>{
@@ -59,15 +61,17 @@ async function logout() { await run(async()=>{
   search.value=''; caseQuery.value=''; casePage.value=1; caseTotal.value=0
   evidencePage.value=1; evidenceTotal.value=0; eventPage.value=1; eventTotal.value=0
   caseNumber.value=''; caseTitle.value=''; evidenceCase.value=''; label.value=''; weight.value=''; reason.value=''
-  sampleLabel.value=''; sampleWeight.value=''; sampleReason.value=''; pendingKeys.clear(); intelligence.reset()
+  sampleLabel.value=''; sampleWeight.value=''; sampleReason.value=''; pendingKeys.clear(); intelligence.reset(); inventory.reset(); persons.reset()
 }) }
 async function makeCase() { await run(async()=>{ await command('case','/cases',{number:caseNumber.value,title:caseTitle.value}); caseNumber.value='';caseTitle.value=''; await refreshAfterWrite('案件草稿已创建') }) }
 async function makeEvidence() { await run(async()=>{ await command('evidence','/evidence',{case_id:evidenceCase.value,label:label.value,weight:weight.value,reason:reason.value}); label.value='';weight.value='';reason.value='';await refreshAfterWrite('证物和初始重量流水已登记') }) }
-async function viewEvents(id:string) { await run(async()=>{selected.value=id;eventPage.value=1;await loadEvents()}) }
+async function viewEvents(id:string) { await run(async()=>{selected.value=id;eventPage.value=1;events.value=[];inventory.reset();await Promise.all([loadEvents(),inventory.load(id,1)])}) }
 async function makeSample() { await run(async()=>{await command('sample',`/evidence/${selected.value}/samples`,{label:sampleLabel.value,weight:sampleWeight.value,reason:sampleReason.value,source_version:selectedItem.value?.version});sampleLabel.value='';sampleWeight.value='';sampleReason.value='';await refreshAfterWrite('分样流水已记录', true)}) }
 const intelligence = createIntelligence({token, username, notice, error, run, command})
+const inventory = createInventory({token,selected,selectedItem,notice,error,run,command,refreshEvidence:loadEvidence})
+const persons = createPersons({token,notice,error,run,command})
 const filteredCases = computed(()=>cases.value)
-return { intelligence, token, username, password, organization, page, error, notice, loading, cases, evidence, events, selected, search, caseQuery, casePage, caseTotal, evidencePage, evidenceTotal, eventPage, eventTotal, caseNumber, caseTitle, evidenceCase, label, weight, reason, sampleLabel, sampleWeight, sampleReason, menu, selectedItem, filteredCases, login, logout, makeCase, makeEvidence, viewEvents, makeSample, searchCases, moveCase, moveEvidence, moveEvents }
+return { intelligence, inventory, persons, command, run, token, username, password, organization, page, error, notice, loading, cases, evidence, events, selected, search, caseQuery, casePage, caseTotal, evidencePage, evidenceTotal, eventPage, eventTotal, caseNumber, caseTitle, evidenceCase, label, weight, reason, sampleLabel, sampleWeight, sampleReason, menu, selectedItem, filteredCases, login, logout, makeCase, makeEvidence, viewEvents, makeSample, searchCases, moveCase, moveEvidence, moveEvents }
 }
 
 type Workspace = ReturnType<typeof createWorkspace>

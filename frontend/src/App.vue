@@ -5,6 +5,7 @@ import CasePage from './features/cases/CasePage.vue'
 import EvidencePage from './features/evidence/EvidencePage.vue'
 import PlannedPage from './features/placeholder/PlannedPage.vue'
 import IntelligencePage from './features/intelligence/IntelligencePage.vue'
+import PersonPage from './features/persons/PersonPage.vue'
 const workspace = createWorkspace()
 provideWorkspace(workspace)
 const { token, username, password, organization, page, error, notice, loading, menu, login, logout } = workspace
@@ -16,6 +17,7 @@ const { token, username, password, organization, page, error, notice, loading, m
   <CasePage v-else-if="page==='案件管理'" />
   <EvidencePage v-else-if="page==='证物管理'" />
   <IntelligencePage v-else-if="page==='情报线索'" />
+  <PersonPage v-else-if="page==='人员档案'" />
   <PlannedPage v-else />
   </div></div></div>
 

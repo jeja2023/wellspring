@@ -28,7 +28,7 @@ def main():
         if sha(ROOT / name) != expected:
             raise SystemExit(f"校验失败: {name}")
     if args.loaded:
-        expected_images = {"wellspring/api:0.0.2", "wellspring/web:0.0.2", "wellspring/postgres:17-offline"}
+        expected_images = {"wellspring/api:0.0.3", "wellspring/web:0.0.3", "wellspring/postgres:17-offline"}
         if set(manifest["images"]) != expected_images:
             raise SystemExit("镜像清单异常")
         for name, expected in manifest["images"].items():

@@ -22,7 +22,7 @@ from .db import get_db
 from .models import Audit, Case, Evidence, IdempotencyRecord, Organization, Session, User, WeightEvent
 from .security import current_user, new_token, token_hash, verify_password
 
-app = FastAPI(title="清源开发验证 API", version="0.0.2")
+app = FastAPI(title="清源开发验证 API", version="0.0.3")
 
 class Login(BaseModel):
     username: str = Field(min_length=1, max_length=80)
@@ -374,3 +374,18 @@ def events(
 
 from .intelligence import create_router as create_intelligence_router
 app.include_router(create_intelligence_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
+
+from .clue_case_links import create_router as create_clue_case_links_router
+app.include_router(create_clue_case_links_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
+
+from .evidence_inventory import create_router as create_evidence_inventory_router
+app.include_router(create_evidence_inventory_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
+
+from .person_drafts import create_router as create_person_drafts_router
+app.include_router(create_person_drafts_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
+
+from .case_relations import create_router as create_case_relations_router
+app.include_router(create_case_relations_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
+
+from .person_case_candidates import create_router as create_person_case_candidates_router
+app.include_router(create_person_case_candidates_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
