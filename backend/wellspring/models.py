@@ -1,9 +1,10 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
-from sqlalchemy import String, ForeignKey, DateTime, Numeric, Boolean, UniqueConstraint, Text, Integer, Date, Index, text
+from sqlalchemy import String, ForeignKey, DateTime, Numeric, Boolean, UniqueConstraint, Text, Integer, Date, Index, text, CheckConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from .db import Base
+from .types import ExactWeight, UTCDateTime
 
 def uid(): return str(uuid4())
 def now(): return datetime.now(timezone.utc)
@@ -12,6 +13,9 @@ class Organization(Base):
     __tablename__ = "organizations"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     name: Mapped[str] = mapped_column(String(120), unique=True)
+    parent_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id"), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
 
 class User(Base):
     __tablename__ = "users"
@@ -20,12 +24,15 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    role_id: Mapped[str | None] = mapped_column(ForeignKey("roles.id"), nullable=True, default="wellspring-business-user")
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
 
 class Session(Base):
     __tablename__ = "sessions"
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime())
 
 class Case(Base):
     __tablename__ = "cases"
@@ -35,29 +42,60 @@ class Case(Base):
     number: Mapped[str] = mapped_column(String(80))
     title: Mapped[str] = mapped_column(String(200))
     status: Mapped[str] = mapped_column(String(40), default="DRAFT")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
+
+class CaseInformation(Base):
+    __tablename__ = "case_information"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
+    number: Mapped[str] = mapped_column(String(80), unique=True)
+    alarm_type: Mapped[str | None] = mapped_column(Text, nullable=True)
+    receiving_unit: Mapped[str | None] = mapped_column(Text, nullable=True)
+    receiving_branch: Mapped[str | None] = mapped_column(Text, nullable=True)
+    alarm_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    alarm_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    caller: Mapped[str | None] = mapped_column(Text, nullable=True)
+    alarm_time: Mapped[str | None] = mapped_column(Text, nullable=True)
+    caller_phone: Mapped[str | None] = mapped_column(Text, nullable=True)
+    additional_result: Mapped[str | None] = mapped_column(Text, nullable=True)
+    feedback_time: Mapped[str | None] = mapped_column(Text, nullable=True)
+    modification_time: Mapped[str | None] = mapped_column(Text, nullable=True)
+    standardized_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    brief_result: Mapped[str | None] = mapped_column(Text, nullable=True)
+    category: Mapped[str | None] = mapped_column(Text, nullable=True)
+    result: Mapped[str | None] = mapped_column(Text, nullable=True)
+    involved_items: Mapped[str | None] = mapped_column(Text, nullable=True)
+    apprehended_people: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags: Mapped[str | None] = mapped_column(Text, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
 
 class Evidence(Base):
     __tablename__ = "evidence"
+    __table_args__ = (CheckConstraint("wellspring_decimal_valid(balance) = 1 AND wellspring_decimal_compare(balance, '0') >= 0", name="ck_evidence_exact_balance").ddl_if(dialect="sqlite"),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
     case_id: Mapped[str] = mapped_column(ForeignKey("cases.id"))
     parent_id: Mapped[str | None] = mapped_column(ForeignKey("evidence.id"), nullable=True)
     label: Mapped[str] = mapped_column(String(200))
-    balance: Mapped[Decimal] = mapped_column(Numeric(20, 6), default=Decimal("0"))
+    balance: Mapped[Decimal] = mapped_column(ExactWeight(), default=Decimal("0"))
     version: Mapped[int] = mapped_column(default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
 
 class WeightEvent(Base):
     __tablename__ = "weight_events"
+    __table_args__ = (CheckConstraint("wellspring_decimal_valid(delta) = 1", name="ck_weight_event_exact_delta").ddl_if(dialect="sqlite"),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     operation_id: Mapped[str] = mapped_column(String(36), index=True)
     evidence_id: Mapped[str] = mapped_column(ForeignKey("evidence.id"), index=True)
     kind: Mapped[str] = mapped_column(String(30))
-    delta: Mapped[Decimal] = mapped_column(Numeric(20, 6))
+    delta: Mapped[Decimal] = mapped_column(ExactWeight())
     actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     reason: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
 
 class Audit(Base):
     __tablename__ = "audit_events"
@@ -66,7 +104,7 @@ class Audit(Base):
     org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
     action: Mapped[str] = mapped_column(String(80))
     object_id: Mapped[str] = mapped_column(String(36))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
 
 
 class IdempotencyRecord(Base):
@@ -81,8 +119,8 @@ class IdempotencyRecord(Base):
     status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     response_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     resource_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
 
 
 class Clue(Base):
@@ -95,7 +133,7 @@ class Clue(Base):
     status: Mapped[str] = mapped_column(String(30), default="DRAFT")
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     version: Mapped[int] = mapped_column(default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
 
 class InvestigationTask(Base):
     __tablename__ = "investigation_tasks"
@@ -110,7 +148,7 @@ class InvestigationTask(Base):
     last_submitter_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     result_code: Mapped[str | None] = mapped_column(String(30), nullable=True)
     version: Mapped[int] = mapped_column(default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
 
 class IntelligenceEvent(Base):
     __tablename__ = "intelligence_events"
@@ -127,7 +165,7 @@ class IntelligenceEvent(Base):
     after_status: Mapped[str] = mapped_column(String(30))
     note: Mapped[str] = mapped_column(Text)
     result_code: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
 
 
 class ClueCaseLink(Base):
@@ -143,25 +181,26 @@ class ClueCaseLink(Base):
     basis: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE")
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
     version: Mapped[int] = mapped_column(default=1)
     revoked_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     revoke_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class EvidenceInventoryObservation(Base):
     __tablename__ = "evidence_inventory_observations"
+    __table_args__ = (CheckConstraint("wellspring_decimal_valid(book_weight) = 1 AND wellspring_decimal_valid(observed_weight) = 1 AND wellspring_decimal_valid(difference) = 1 AND wellspring_decimal_compare(book_weight, '0') >= 0 AND wellspring_decimal_compare(observed_weight, '0') >= 0", name="ck_inventory_exact_weights").ddl_if(dialect="sqlite"),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
     evidence_id: Mapped[str] = mapped_column(ForeignKey("evidence.id"), index=True)
-    book_weight: Mapped[Decimal] = mapped_column(Numeric(20, 6))
-    observed_weight: Mapped[Decimal] = mapped_column(Numeric(20, 6))
-    difference: Mapped[Decimal] = mapped_column(Numeric(20, 6))
+    book_weight: Mapped[Decimal] = mapped_column(ExactWeight())
+    observed_weight: Mapped[Decimal] = mapped_column(ExactWeight())
+    difference: Mapped[Decimal] = mapped_column(ExactWeight())
     evidence_version: Mapped[int] = mapped_column(Integer)
     note: Mapped[str] = mapped_column(Text)
     actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
 
 
 class PersonDraft(Base):
@@ -172,7 +211,7 @@ class PersonDraft(Base):
     source: Mapped[str] = mapped_column(String(200))
     verification_status: Mapped[str] = mapped_column(String(30), default="UNVERIFIED")
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
     version: Mapped[int] = mapped_column(default=1)
 
 
@@ -188,9 +227,9 @@ class CaseRelation(Base):
     basis: Mapped[str] = mapped_column(Text)
     version: Mapped[int] = mapped_column(Integer, default=1)
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
     revoked_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     revoke_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 class CaseRelationEvent(Base):
@@ -203,7 +242,7 @@ class CaseRelationEvent(Base):
     before_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     after_status: Mapped[str] = mapped_column(String(20))
     note: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
 
 
 class PersonCaseCandidate(Base):
@@ -217,9 +256,9 @@ class PersonCaseCandidate(Base):
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE")
     version: Mapped[int] = mapped_column(Integer, default=1)
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
     revoked_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     revoke_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 class PersonCaseCandidateEvent(Base):
@@ -230,7 +269,7 @@ class PersonCaseCandidateEvent(Base):
     actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     action: Mapped[str] = mapped_column(String(30))
     note: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
 
 
 class InventoryInvestigation(Base):
@@ -243,7 +282,7 @@ class InventoryInvestigation(Base):
     investigator_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     last_submitter_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
 
 class InventoryInvestigationEvent(Base):
     __tablename__ = "inventory_investigation_events"
@@ -255,7 +294,7 @@ class InventoryInvestigationEvent(Base):
     before_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
     after_status: Mapped[str] = mapped_column(String(30))
     note: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
 
 
 class CaseImportBatch(Base):
@@ -267,8 +306,8 @@ class CaseImportBatch(Base):
     digest: Mapped[str] = mapped_column(String(64))
     mapping_version: Mapped[str] = mapped_column(String(30))
     status: Mapped[str] = mapped_column(String(30))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
 
 class CaseImportRow(Base):
     __tablename__ = "case_import_rows"
@@ -292,7 +331,7 @@ class EvidenceCustody(Base):
     evidence_id: Mapped[str] = mapped_column(ForeignKey("evidence.id"), index=True)
     custodian_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     version: Mapped[int] = mapped_column(Integer, default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
 
 class CustodyHandover(Base):
     __tablename__ = "custody_handovers"
@@ -307,8 +346,8 @@ class CustodyHandover(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
     note: Mapped[str] = mapped_column(Text)
     response_note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
-    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
+    responded_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
 
 class CustodyEvent(Base):
     __tablename__ = "custody_events"
@@ -319,4 +358,23 @@ class CustodyEvent(Base):
     actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     action: Mapped[str] = mapped_column(String(30))
     note: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
+
+
+# Match the migration indexes used by the scoped queries.
+Index('ix_cases_org_created', Case.org_id, Case.created_at, Case.id)
+Index('ix_evidence_org_created', Evidence.org_id, Evidence.created_at, Evidence.id)
+Index('ix_clues_org_created', Clue.org_id, Clue.created_at, Clue.id)
+Index('ix_people_org_created', PersonDraft.org_id, PersonDraft.created_at, PersonDraft.id)
+Index('ix_case_information_org_active_created', CaseInformation.org_id, CaseInformation.deleted_at, CaseInformation.created_at, CaseInformation.id)
+Index('ix_case_information_active_created', CaseInformation.deleted_at, CaseInformation.created_at, CaseInformation.id)
+Index('ix_audit_actor_created', Audit.actor_id, Audit.created_at, Audit.id)
+Index('ix_audit_created', Audit.created_at, Audit.id)
+Index('ix_sessions_user_id', Session.user_id)
+Index('ix_sessions_expires_at', Session.expires_at)
+Index('ix_tasks_org_assignee_status', InvestigationTask.org_id, InvestigationTask.assignee_id, InvestigationTask.status, InvestigationTask.due_date, InvestigationTask.id)
+Index('ix_tasks_org_review_created', InvestigationTask.org_id, InvestigationTask.status, InvestigationTask.created_at, InvestigationTask.id)
+
+from . import wastewater_models  # Register the independent monitoring tables.
+from . import intake_models
+from . import access_models

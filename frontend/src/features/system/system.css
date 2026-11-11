@@ -1,0 +1,33 @@
+.system-search{display:flex;align-items:end;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+.system-search input{margin-bottom:0}
+.system-parameters-table th,.system-parameters-table td{white-space:nowrap}
+.check-label{display:flex;align-items:center;gap:8px;font-weight:400;margin:10px 0}
+.check-label input[type=checkbox]{display:inline-block;width:auto;margin:0;flex:none}
+.check-label small{overflow-wrap:anywhere}
+.permission-group{margin:16px 0;padding:12px;border:1px solid #d8e1ea;border-radius:6px}
+.permission-group h3{margin:0 0 10px;font-size:14px}
+
+.permission-filters .permission-role-select{flex:0 1 280px;min-width:220px}
+.permission-filters .permission-search{flex:1 1 240px;max-width:420px;min-width:200px}
+.permission-filters .permission-module-select{flex:0 1 180px;min-width:150px}
+.permission-filters select{margin-bottom:0}
+.permission-filters .permission-selected-filter{margin:0 0 10px;white-space:nowrap}
+.permission-filter-actions{display:flex;gap:10px}
+.permission-role-summary{display:flex;align-items:center;gap:16px 30px;flex-wrap:wrap;margin:0}
+.permission-role-summary>div{display:flex;align-items:center;gap:10px}
+.permission-role-summary dt{color:#61778b}
+.permission-role-summary dd{margin:0}
+.permission-guidance{font-size:12px;line-height:1.8;margin:18px 0 14px}
+.permission-results-line{font-size:12px;margin:14px 0}
+.permission-table{min-width:960px}
+.permission-table th,.permission-table td{white-space:nowrap}
+.permission-option{margin:0;white-space:nowrap}
+.permission-option input{accent-color:#0e7770}
+.permission-table .permission-empty{height:140px;white-space:normal}
+.permission-save-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:20px;padding-top:20px;border-top:1px solid #d8e1ea}
+.permission-save-summary{display:flex;gap:8px 20px;flex-wrap:wrap;align-items:center;font-size:12px;line-height:1.8}
+.permission-save-summary .permission-validation{flex-basis:100%;margin:0;color:#b42318}
+.permission-save-actions{margin:0 0 0 auto;flex-wrap:wrap}
+.permission-switch-note p{margin:0}
+.permission-switch-note .actions{margin:12px 0 0;flex-wrap:wrap}
+@media(max-width:800px){.permission-filters .permission-role-select,.permission-filters .permission-search{flex:1 1 240px;max-width:none;min-width:0}.permission-role-summary{gap:12px 20px}.permission-save-summary{width:100%}}

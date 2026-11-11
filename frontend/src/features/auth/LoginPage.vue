@@ -48,12 +48,11 @@ const { username, password, error, loading, login } = useWorkspace()
         <div class="login-label">账号登录 <span></span></div>
         <h2 id="login-heading">欢迎登录清源</h2>
         <p class="login-subtitle">请输入您的账号信息，进入业务工作台。</p>
-        <div class="login-environment" role="note"><span aria-hidden="true">!</span><div><strong>开发验证环境</strong><small>禁止录入真实业务数据</small></div></div>
         <form @submit.prevent="login" class="login-form">
           <label for="login-username">账号</label>
-          <input id="login-username" v-model="username" autocomplete="username" placeholder="请输入账号" required />
+          <input id="login-username" v-model="username" autocomplete="username" maxlength="80" placeholder="请输入账号" required />
           <label for="login-password">密码</label>
-          <input id="login-password" v-model="password" type="password" autocomplete="current-password" placeholder="请输入密码" required />
+          <input id="login-password" v-model="password" type="password" autocomplete="current-password" maxlength="256" placeholder="请输入密码" required />
           <p v-if="error" class="login-error" role="alert">{{ error }}</p>
           <button type="submit" :disabled="loading">{{ loading ? '正在登录…' : '登录系统' }} <span aria-hidden="true">→</span></button>
         </form>

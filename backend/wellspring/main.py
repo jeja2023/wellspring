@@ -3,6 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import logging
+from time import perf_counter
+from functools import lru_cache
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Literal
@@ -14,19 +18,23 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select, update, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DBSession
 
 from .db import get_db
 from .models import Audit, Case, Evidence, IdempotencyRecord, Organization, Session, User, WeightEvent
-from .security import current_user, new_token, token_hash, verify_password
+from .http_limits import RequestBudgetMiddleware, login_limiter
+from .types import weight_text
+from .access_policy import identity_json
+from .security import DUMMY_PASSWORD_HASH, PASSWORD_MAX_LENGTH, USERNAME_MAX_LENGTH, current_admin, current_user, new_token, token_hash, verify_password
 
-app = FastAPI(title="清源开发验证 API", version="0.0.4")
+app = FastAPI(title="清源开发验证 API", version="0.0.5")
+app.add_middleware(RequestBudgetMiddleware)
 
 class Login(BaseModel):
-    username: str = Field(min_length=1, max_length=80)
-    password: str = Field(min_length=1, max_length=256)
+    username: str = Field(min_length=1, max_length=USERNAME_MAX_LENGTH)
+    password: str = Field(min_length=1, max_length=PASSWORD_MAX_LENGTH)
 
 class CaseCreate(BaseModel):
     number: str = Field(min_length=1, max_length=80)
@@ -63,8 +71,13 @@ async def request_id_middleware(request: Request, call_next):
     candidate = request.headers.get("X-Request-ID", "")
     rid = candidate if re.fullmatch(r"[A-Za-z0-9._:-]{8,64}", candidate) else str(uuid4())
     request.state.request_id = rid
+    started = perf_counter()
     response = await call_next(request)
     response.headers["X-Request-ID"] = rid
+    logging.getLogger("wellspring.requests").info(
+        "request_complete request_id=%s status=%s duration_ms=%.1f",
+        rid, response.status_code, (perf_counter() - started) * 1000,
+    )
     return response
 
 
@@ -82,7 +95,7 @@ def error_body(request: Request, status_code: int, detail: Any) -> dict[str, Any
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-    return JSONResponse(status_code=exc.status_code, content=error_body(request, exc.status_code, exc.detail), headers={"X-Request-ID": request_id(request)})
+    return JSONResponse(status_code=exc.status_code, content=error_body(request, exc.status_code, exc.detail), headers={**(exc.headers or {}), "X-Request-ID": request_id(request)})
 
 
 @app.exception_handler(RequestValidationError)
@@ -96,6 +109,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def unexpected_exception_handler(request: Request, exc: Exception):
+    logging.getLogger("wellspring").error("request_failed request_id=%s exception_type=%s", request_id(request), type(exc).__name__)
     return JSONResponse(status_code=500, content=error_body(request, 500, {"code": "INTERNAL_ERROR", "message": "服务暂时不可用，请联系管理员并提供请求编号", "details": []}), headers={"X-Request-ID": request_id(request)})
 
 
@@ -193,17 +207,44 @@ def health():
     return {"status": "ok", "mode": "development", "version": app.version}
 
 
+@lru_cache(maxsize=1)
+def expected_schema_heads():
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    config = Config()
+    config.set_main_option("script_location", str(Path(__file__).resolve().parent.parent / "migrations"))
+    return set(ScriptDirectory.from_config(config).get_heads())
+
+
+@app.get("/api/ready")
+def readiness(db: DBSession = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+        current = set(db.scalars(text("SELECT version_num FROM alembic_version")))
+        if current != expected_schema_heads():
+            raise ValueError("schema version mismatch")
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "not_ready"})
+    return {"status": "ready"}
+
+
 @app.post("/api/login")
-def login(data: Login, db: DBSession = Depends(get_db)):
+def login(data: Login, request: Request, db: DBSession = Depends(get_db)):
+    peer = request.client.host if request.client else "unknown"
+    if not login_limiter.allow(peer, data.username):
+        raise HTTPException(status_code=429, detail={"code": "LOGIN_RATE_LIMITED", "message": "登录尝试过于频繁，请稍后再试", "details": []}, headers={"Retry-After": str(login_limiter.retry_after_seconds())})
     user = db.scalar(select(User).where(User.username == data.username))
-    if not user or not user.active or not verify_password(data.password, user.password_hash):
+    valid_password = verify_password(data.password, user.password_hash if user else DUMMY_PASSWORD_HASH)
+    organization = db.get(Organization,user.org_id) if user else None
+    if not user or not user.active or not organization or not organization.active or not valid_password:
         raise api_error(401, "UNAUTHENTICATED", "账号或密码错误")
     token = new_token()
+    db.execute(delete(Session).where(Session.expires_at <= datetime.now(timezone.utc)))
     db.add(Session(token_hash=token_hash(token), user_id=user.id, expires_at=datetime.now(timezone.utc) + timedelta(hours=8)))
     audit(db, user, "LOGIN", user.id)
     db.commit()
     organization = db.get(Organization, user.org_id)
-    return {"token": token, "username": user.username, "organization": organization.name if organization else ""}
+    return {"token": token, **identity_json(db,user,organization)}
 
 
 @app.post("/api/logout")
@@ -212,6 +253,39 @@ def logout(user: User = Depends(current_user), db: DBSession = Depends(get_db)):
     audit(db, user, "LOGOUT", user.id)
     db.commit()
     return {"ok": True}
+
+
+@app.get("/api/session")
+def session_info(user: User = Depends(current_user), db: DBSession = Depends(get_db)):
+    organization = db.get(Organization, user.org_id)
+    return identity_json(db,user,organization)
+
+
+@app.get("/api/admin/status")
+def admin_status(user: User = Depends(current_admin)):
+    return {"username": user.username, "is_admin": True}
+
+
+class SystemAuditSearch(BaseModel):
+    username: str = Field(default="", max_length=80)
+    action: str = Field(default="", max_length=80)
+    page: int = Field(default=1, ge=1, le=100000)
+    page_size: int = Field(default=20, ge=1, le=100)
+
+
+@app.post("/api/admin/audit/search")
+def search_system_audit(data: SystemAuditSearch, request: Request, user: User = Depends(current_admin), db: DBSession = Depends(get_db)):
+    stmt = select(Audit, User.username, Organization.name).join(User, Audit.actor_id == User.id).join(Organization, Audit.org_id == Organization.id)
+    if data.username.strip():
+        stmt = stmt.where(User.username.contains(data.username.strip(), autoescape=True))
+    if data.action.strip():
+        stmt = stmt.where(Audit.action.contains(data.action.strip(), autoescape=True))
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = db.execute(stmt.order_by(Audit.created_at.desc(), Audit.id.desc()).offset((data.page - 1) * data.page_size).limit(data.page_size)).all()
+    items = [{"id": event.id, "username": username, "organization": org_name, "action": event.action, "object_id": event.object_id, "created_at": event.created_at} for event, username, org_name in rows]
+    audit(db, user, "SYSTEM_AUDIT_SEARCH", user.id)
+    db.commit()
+    return page_result(items, data.page, data.page_size, total, request_id(request))
 
 
 @app.get("/api/cases")
@@ -278,7 +352,10 @@ def list_evidence(
     if q.strip():
         stmt = stmt.where(Evidence.label.contains(q.strip(), autoescape=True))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    rows = db.scalars(sorted_statement(stmt, SORTABLE_EVIDENCE, sort, order, Evidence.id).offset((page - 1) * page_size).limit(page_size)).all()
+    sort_columns = dict(SORTABLE_EVIDENCE)
+    if db.get_bind().dialect.name == "sqlite":
+        sort_columns["balance"] = Evidence.balance.collate("WELLSPRING_DECIMAL")
+    rows = db.scalars(sorted_statement(stmt, sort_columns, sort, order, Evidence.id).offset((page - 1) * page_size).limit(page_size)).all()
     audit(db, user, "EVIDENCE_LIST", user.org_id)
     db.commit()
     return page_result([evidence_json(item) for item in rows], page, page_size, total, request_id(request))
@@ -328,7 +405,12 @@ def sample(
     record, replay = reserve_idempotency(db, user, "EVIDENCE_SAMPLE", idempotency_key, payload_input)
     if replay:
         return replay
-    result = db.execute(update(Evidence).where(Evidence.id == parent.id, Evidence.org_id == user.org_id, Evidence.version == data.source_version, Evidence.balance >= data.weight).values(balance=Evidence.balance - data.weight, version=Evidence.version + 1))
+    enough = Evidence.balance >= data.weight
+    remaining = Evidence.balance - data.weight
+    if db.get_bind().dialect.name == "sqlite":
+        enough = func.wellspring_decimal_compare(Evidence.balance, weight_text(data.weight)) >= 0
+        remaining = func.wellspring_decimal_subtract(Evidence.balance, weight_text(data.weight))
+    result = db.execute(update(Evidence).where(Evidence.id == parent.id, Evidence.org_id == user.org_id, Evidence.version == data.source_version, enough).values(balance=remaining, version=Evidence.version + 1).execution_options(synchronize_session=False))
     if result.rowcount != 1:
         db.expire(parent)
         current = db.get(Evidence, parent.id)
@@ -401,3 +483,15 @@ app.include_router(create_case_imports_router(api_error, audit, reserve_idempote
 
 from .evidence_custody import create_router as create_evidence_custody_router
 app.include_router(create_evidence_custody_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
+
+from .case_information import create_router as create_case_information_router
+app.include_router(create_case_information_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
+
+from .wastewater import create_router as create_wastewater_router
+app.include_router(create_wastewater_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
+
+from .intake_cases import create_router as create_intake_cases_router
+app.include_router(create_intake_cases_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
+
+from .administration import create_router as create_administration_router
+app.include_router(create_administration_router(api_error,audit,reserve_idempotency,finish_idempotency,page_result,request_id))

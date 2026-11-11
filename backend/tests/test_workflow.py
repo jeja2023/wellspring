@@ -12,10 +12,16 @@ from wellspring.security import password_hash
 
 @pytest.fixture
 def context():
+    from wellspring.http_limits import login_limiter
+    login_limiter.clear()
     engine = create_engine("sqlite://", connect_args={"check_same_thread":False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     with factory() as db:
+        import json
+        from wellspring.access_models import Role
+        from wellspring.access_policy import DEFAULT_ROLE_ID,LEGACY_PERMISSIONS
+        db.add(Role(id=DEFAULT_ROLE_ID,code='business_user',name='业务用户',permissions_json=json.dumps(sorted(LEGACY_PERMISSIONS))))
         a, b = Organization(name="A"), Organization(name="B")
         db.add_all([a,b]); db.flush()
         db.add_all([User(username="alice",password_hash=password_hash("test-password-123"),org_id=a.id),User(username="bob",password_hash=password_hash("test-password-123"),org_id=b.id)])

@@ -9,7 +9,13 @@ if context.is_offline_mode():
     context.configure(url=DATABASE_URL, target_metadata=target_metadata, literal_binds=True)
     with context.begin_transaction(): context.run_migrations()
 else:
-    engine = engine_from_config(config.get_section(config.config_ini_section), prefix="sqlalchemy.", poolclass=pool.NullPool)
-    with engine.connect() as connection:
+    def run(connection):
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction(): context.run_migrations()
+    supplied = config.attributes.get('connection')
+    if supplied is not None:
+        run(supplied)
+    else:
+        engine = engine_from_config(config.get_section(config.config_ini_section), prefix="sqlalchemy.", poolclass=pool.NullPool)
+        with engine.connect() as connection:
+            run(connection)

@@ -4,11 +4,16 @@ __pycache__/
 .pytest_cache/
 *.pyc
 *.db
+*.migration.lock
+*.migration.failed.json
 .env
 
 .venv/
+backend/backups/
 
 releases/
+frontend/test-results/
+frontend/playwright-report/
 
 # 本机配置、密钥、数据库及运行日志不纳入版本管理。
 .env.*
@@ -26,3 +31,5 @@ secrets/
 *.p12
 *.pfx
 *.log
+# Local PostgreSQL connection settings (no passwords).
+/.wellspring-postgres.json

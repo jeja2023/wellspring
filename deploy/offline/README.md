@@ -1,89 +1,102 @@
 # 清源单节点离线部署候选方案
 
-> 当前适用：隔离内网、单节点、Docker Compose、PostgreSQL 17 的部署验证。项目仍是开发验证版本，不得用于真实业务或生产数据。尚需在目标操作系统、CPU 架构、Docker 版本、数据库、备份和安全边界验证后才能作为交付方案。
+当前用于隔离环境、单节点 Docker Compose + PostgreSQL 17 的虚构数据验证。正式业务仍需完成角色权限、网络传输保护、审计归集及目标环境验收。Windows 命令见 [Windows 离线部署步骤](WINDOWS.md)。
 
-## 架构和边界
+当前源码产品版本为 `0.0.5`，Compose 与环境示例默认引用 `wellspring/app:0.0.5`；修改标签不会更新已经构建或运行的镜像，须重新制作并核验镜像包。数据库 head 为 `0021`，升级与本次验证见 [0.0.5 版本说明](../../docs/0.0.5-版本说明.md)。
 
-浏览器通过 `http://内网地址:8080` 访问 Nginx；Nginx 提供 Vue 构建后的静态文件，`/api/` 转发给 FastAPI。数据库和 API 不发布宿主机端口，位于 Compose 内部网络。没有运行 Vite 开发服务器；没有部署尚未实现的 Worker 和对象存储。
+## 架构与可用性
 
-**没有证书意味着当前使用 HTTP 明文。** 密码、会话令牌和业务数据在网络中可能被窃听或篡改；离线并不自动提供链路加密。默认仅绑定 `127.0.0.1` 供本机验证。要开放给其他主机，必须由建设单位确认隔离网络和风险控制，正式业务应配置经批准的内网 TLS／受信证书或其他经批准的传输保护方案。本方案不凭无证书推定可以承载真实数据。
+同一应用容器提供 Vue 静态页面和 FastAPI；独立 PostgreSQL 容器使用持久卷，数据库不开放宿主机端口。入口默认 `http://127.0.0.1:8080`。跨机访问必须配置经批准的 TLS 和访问控制，隔离网络不等于链路加密。
 
-Compose 单机不提供高可用；服务健康检查只是启动／存活检查，不证明权限、账实、备份或整体可用性。`/api/health` 当前不检查数据库连接。现有 API 未完成角色／字段权限、RLS、登录限速、会话保护、审计归集及生产加固。
+`/api/health` 仅用于进程存活；Compose 使用 `/api/ready` 检查数据库连接和迁移版本，失败返回 503。就绪检查不证明业务权限或数据恢复通过。单节点没有高可用保证。
 
-## A. 联网构建机：制作离线包
+## 1. 联网构建机制作镜像包
 
-需要 Docker、Python、受控镜像来源和联网依赖源。选定并审核匹配目标 CPU 的 Python 3.12、Node 及 Nginx 镜像，PostgreSQL **必须选择 17 系列**；供应商确认后提供各镜像的完整 `name@sha256:...` 摘要。提前拉取 PostgreSQL 摘要镜像；构建时下载前端／Python 依赖，不在离线目标环境执行构建或下载。
-
-在项目根目录运行（以下值为占位符，不可直接执行）：
+审核并固定 Python 3.12、Node 和 PostgreSQL **17** 镜像完整摘要，提前获取与目标平台一致的 PostgreSQL 镜像。数据库镜像须包含 Bash 及官方 `/usr/local/bin/docker-entrypoint.sh`。以下摘要是占位符：
 
 ```sh
 python deploy/offline/make_bundle.py \
   --python-base 'python@sha256:<64位摘要>' \
   --node-base 'node@sha256:<64位摘要>' \
-  --nginx-base 'nginx@sha256:<64位摘要>' \
   --postgres 'postgres@sha256:<64位摘要>' \
+  --platform linux/amd64 \
   --output /path/to/new-wellspring-bundle
 ```
 
-构建机会生成 `images.tar`、部署配置、`manifest.json`、`SHA256SUMS` 和本文档，并输出 manifest 摘要。通过独立可信渠道提供 manifest 摘要给目标环境；仅与包一起携带的摘要无法证明来源。导出前应完成漏洞扫描、依赖与许可证审核、SBOM、镜像来源审核和目标架构验证。当前 Python 只锁定直接依赖，**还不是可复现的全量哈希锁**；不能将该构建脚本误称为已完成供应链生产验收。
+构建只复制允许的源文件到独立上下文；数据库、备份、`.env`、依赖目录和测试产物不会进入该上下文。Python 按 `requirements.lock` 的完整哈希安装，前端执行 `npm ci`。构建时需要联网，离线目标环境只加载制品。
 
-## B. 离线目标机：检查并导入
+包内包含 `images.tar`、配置和 `manifest.json`。清单格式为 2，记录产品版本、平台、源码提交和未提交标记、实际构建输入摘要、两类依赖锁摘要、基础镜像摘要和输出镜像 ID。当前工作区未提交改动会进入构建，Git 提交号本身不代表实际制品；`build_inputs_sha256` 记录此次实际输入。全量依赖锁不替代许可证、漏洞、SBOM 和制品来源审查。
 
-以下以 Linux 为例，目标机需预装 Docker Engine、Compose、Python 3 和标准 `sha256sum`。目标路径、用户、目录权限和密钥管理由运维确认。命令在离线包目录执行；不要使用包含真实数据的环境做首次演练。
+## 2. 建立可信校验链后再导入
 
-1. 核对独立渠道提供的 manifest 摘要与 `sha256sum manifest.json` 一致。
-2. `sha256sum -c SHA256SUMS`，随后执行 `python3 verify_bundle.py`。出现错误立即停止。
-3. `docker load -i images.tar`，执行 `python3 verify_bundle.py --loaded` 核对镜像 ID。
-4. 将 `env.example` 复制到包外受控位置，例如 `/etc/wellspring/deploy.env`；确认 `SECRETS_DIR`、绑定地址、端口及镜像标签。必须避免覆盖已存在的配置。
+**不要直接执行待验包里的 `verify_bundle.py`，也不要以待验包内 README 作为可信命令来源。** 首先通过独立可信渠道取得以下三项，并保存到包外受控目录：
 
-校验可以检测文件与已知摘要不一致；摘要本身不是签名，不能替代制品来源审查。
+- 本节经审核的操作步骤；
+- `trusted_verify.py` 引导工具及其独立 SHA-256（构建机脚本会打印工具路径和摘要）；
+- 本次 `manifest.json` 的独立 SHA-256。
 
-## C. 密钥和首次初始化
-
-在宿主机的受限目录准备 `db_owner_password` 和 `runtime_password` 两个 UTF-8 文本文件，每个只包含各自一个非空密码和可选结尾换行。使用强随机密码；目录、文件只授予启动服务所需账号和容器可读取权限。两个密码要不同，不能放进环境文件、命令历史、镜像、仓库或工单。Compose 的文件型 secrets 是本地文件挂载，**不是完整的密钥管理系统**，须按目标系统 UID、ACL 与备份制度验证；数据库首次初始化后修改文件不会自动更新数据库密码。
-
-以 `deploy.env` 指定的密钥目录为准，以下 `CFG` 示例变量仅指配置文件路径：
+`trusted_verify.py` 故意不放入镜像包；不能将同包携带的脚本或摘要当作独立来源。目标机使用可信系统 Python 3.12+ 和 `sha256sum`，在无非可信用户写权限的目录执行：
 
 ```sh
-CFG=/etc/wellspring/deploy.env
+# 先将结果与独立渠道的工具摘要逐字核对；不一致立即停止。
+sha256sum /opt/wellspring-tools/trusted_verify.py
+# EXPECTED_MANIFEST 必须来自独立渠道，不从包内复制。
+EXPECTED_MANIFEST='<独立确认的64位manifest摘要>'
+python3 -I /opt/wellspring-tools/trusted_verify.py /srv/wellspring/bundle \
+  --manifest-sha256 "$EXPECTED_MANIFEST"
+```
+
+引导工具先用可信标准库核验 manifest，再核验包内校验器的字节；只执行已经验证的字节。`-I` 阻止包内 `json.py`、`hashlib.py`、`sitecustomize.py` 或 `PYTHONPATH` 覆盖标准库。校验器严格检查全部文件名、文件摘要和符号链接，避免路径越界；不能省略 `-I`。操作期间目录必须保持受控，校验通过之前不执行任何包内代码。
+
+```sh
+docker load -i /srv/wellspring/bundle/images.tar
+python3 -I /opt/wellspring-tools/trusted_verify.py /srv/wellspring/bundle \
+  --manifest-sha256 "$EXPECTED_MANIFEST" --loaded
+```
+
+每一步失败立即停止。摘要链能检测与可信输入不一致，仍不能替代发布主体的数字签名和来源审查。
+
+## 3. 配置、密钥与首次初始化
+
+把 `env.example` 复制到包外受控路径（例如 `/etc/wellspring/.env`），填写镜像引用、端口和 `SECRETS_DIR`；禁止覆盖已存在配置。在密钥目录创建 `db_owner_password`、`runtime_password`，使用不同的强随机密码，限制目录和文件权限。密码文件必须为 **UTF-8 无 BOM**，仅一行；可以无结尾换行，或带一个 LF/CRLF，不能有多行、空密码或 NUL。空格是密码的一部分。
+
+数据库启动包装器在内存文件系统中统一规范化两份密钥，再交给 PostgreSQL 官方入口；应用使用相同规则。首次初始化后更改文件不会修改数据库内的账号密码。已有旧环境若曾把 CR 错存入密码，必须人工轮换数据库密码并同步文件，不能删除数据库卷解决。
+
+```sh
+CFG=/etc/wellspring/.env
+cd /srv/wellspring/bundle
 docker compose --env-file "$CFG" -f compose.yaml config --quiet
 docker compose --env-file "$CFG" -f compose.yaml up -d db
 docker compose --env-file "$CFG" -f compose.yaml --profile tools run --rm migrate
-```
-
-首次初始化时数据库容器创建迁移所有者 `wellspring_owner` 和非超级用户运行角色 `wellspring_app`；迁移建立表并收紧审计表修改权限。若初始化脚本失败，需检查日志、账户和持久化卷状态，不能对含数据的卷盲目删除重建。迁移使用所有者账号，API 和账号初始化使用运行账号；RLS 和生产角色完整矩阵尚未实现。
-
-创建唯一的命名开发账号（交互式输入，不写入镜像或脚本）：
-
-```sh
-docker compose --env-file "$CFG" -f compose.yaml --profile tools run --rm bootstrap
-```
-
-然后启动服务：
-
-```sh
-docker compose --env-file "$CFG" -f compose.yaml up -d api web
+docker compose --env-file "$CFG" -f compose.yaml --profile tools run --rm bootstrap bootstrap --initial-admin
+docker compose --env-file "$CFG" -f compose.yaml up -d app
 docker compose --env-file "$CFG" -f compose.yaml ps
 ```
 
-从获准的终端访问配置的地址，检查首页、`/api/health`、登录、权限和退出。健康检查不代替功能及安全测试。首次数据库初始化完成后，正常重启无需重新创建账号或执行迁移。
+初次创建数据库时建立 `wellspring_owner` 和非特权 `wellspring_app`。迁移使用所有者，每次迁移完成后按显式表权限矩阵授权：重量及审计等历史事件只允许 SELECT/INSERT；普通业务表允许必要写入；sessions 允许退出删除；alembic_version 只允许 SELECT；新表默认不授权。新模块必须同时补权限矩阵和 PostgreSQL 角色测试。此矩阵不等于正式岗位、字段权限或 RLS。
 
-## D. 升级与恢复
+`bootstrap` 交互输入命名账号和至少 12 位密码，管理员只允许首次初始化。初始化失败需检查日志、角色和卷状态，不能盲目重建卷。正常启动只需 `docker compose --env-file "$CFG" -f compose.yaml up -d`；停止使用 `stop`，不要使用删除数据卷的 `down -v`。
 
-先审查新版本的兼容性、迁移、密钥、配置及回滚说明；保存并测试数据库与相关文件的同一恢复点，再经批准停写。核验并加载新的离线包后，更新受控环境文件中的镜像引用；按版本手册先运行迁移，再启动新 API 和 Web，验证版本、核心流程、权限与审计。数据库迁移可能不可逆，恢复以已演练的备份／前向修复方案为准，不能仅回滚镜像标签。当前尚无对象存储，后续接入时必须纳入同一恢复点核对。
+## 4. 备份与隔离恢复演练
 
-示例备份（输出属于敏感数据，目标目录需受控）：
+只有在前述校验全部通过后，才能运行包内工具。备份目标应在受控目录，命令使用 Python 二进制管道，避免 Windows PowerShell 文本重定向损坏 dump：
 
 ```sh
-docker compose --env-file "$CFG" -f compose.yaml exec -T db \
-  pg_dump -U wellspring_owner -Fc wellspring > /secure-backup/wellspring.dump
+python3 -I backup_restore.py backup --env-file "$CFG" \
+  --output /secure-backup/wellspring-2026-11-11.dump
+python3 -I backup_restore.py drill \
+  --dump /secure-backup/wellspring-2026-11-11.dump \
+  --sha256 '<核对备份摘要文件中的64位值>' \
+  --postgres-image wellspring/postgres:17-offline \
+  --report /secure-backup/restore-drill-2026-11-11.json
 ```
 
-恢复必须在隔离环境先演练，记录 PostgreSQL 版本、备份时间、角色、密钥、数据完整性和实际恢复耗时；未经演练不要对现有生产库直接执行恢复。`docker compose down -v` 会删除数据库卷，不应作为日常停止、升级或故障处理步骤。
+`backup` 不覆盖现有文件，产生自定义格式 dump 和 SHA-256。`drill` 在名称随机、无网络、无宿主机端口、无现有数据卷挂载的临时 PostgreSQL 容器中真正恢复；检查 `pg_restore` 退出状态、迁移版本、每张表计数及证物余额与重量流水一致性，并输出版本、镜像 ID、恢复耗时和摘要。无论成功失败都删除本次创建的演练容器；不修改源数据库或现有部署。恢复库在内存文件系统，需预留足够内存，较大数据应按经审核的隔离存储方案另行演练。
 
-## 当前交付缺口
+报告不代替应用权限与业务验收；本工具恢复时跳过源 ACL/所有者，实际灾备切换仍需重新创建角色、执行迁移授权并验证应用。备份范围还包括受保护的部署配置、密钥及版本记录；未来加入对象文件后须纳入同一恢复点。
 
-- 尚未在目标机完成镜像构建、离线导入、数据库初始化、角色权限和端到端联调。
-- 未提供全量依赖哈希锁、SBOM、漏洞扫描、正式密钥管理及签名。
-- 未实现 Worker、对象存储、独立受保护审计、正式认证／RLS、监控及数据库完整备份恢复演练。
-- API 当前健康接口不检查数据库可用性；应用不应以健康接口成功作为完整业务可用的证明。
+## 5. 升级
+
+审查兼容性与迁移，先备份并完成恢复演练，再停写。核验并加载新包，更新包外环境文件中的镜像引用，运行 migrate，再启动 app，检查 ready 和核心流程。迁移可能不可逆，不能仅靠回滚镜像标签恢复。保留此前可恢复备份及演练报告。
+
+生产前仍需完成目标 Linux/Windows 机器上的完整离线导入、密钥 ACL、网络传输、权限/审计、备份恢复与并发验收；不得把单元测试或健康接口成功表述为生产交付通过。

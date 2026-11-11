@@ -232,7 +232,7 @@ def create_router(error, audit, reserve, finish, page_result, request_id):
             values={"status":target,"version":InvestigationTask.version+1,"last_submitter_id":user.id,"result_code":data.result}
         else:
             if data.result is not None: raise error(422,"VALIDATION_ERROR","复核操作不接受新的核查结果")
-            if task.last_submitter_id == user.id: raise error(403,"FORBIDDEN","核查提交人不能复核自己的结果")
+            if task.last_submitter_id is None or task.last_submitter_id == user.id: raise error(403,"FORBIDDEN","核查提交人不能复核自己的结果")
             allowed=("PENDING_REVIEW",); target="RETURNED" if data.action=="RETURN" else "CLOSED"
             values={"status":target,"version":InvestigationTask.version+1}
         before=task.status

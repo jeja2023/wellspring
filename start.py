@@ -12,28 +12,13 @@ import sys
 import time
 from urllib.error import URLError
 from urllib.request import urlopen
+from local_config import database_environment, database_target
 
 ROOT = Path(__file__).resolve().parent
 BACKEND = ROOT / "backend"
 FRONTEND = ROOT / "frontend"
 VENV_PYTHON = BACKEND / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 VITE = FRONTEND / "node_modules" / "vite" / "bin" / "vite.js"
-MIGRATION_CHECK = """from alembic.config import Config
-from alembic.script import ScriptDirectory
-from alembic.runtime.migration import MigrationContext
-from pathlib import Path
-from wellspring.db import engine
-if engine.url.get_backend_name() == 'sqlite':
-    database = engine.url.database
-    if database and database != ':memory:' and not Path(database).is_file():
-        raise SystemExit('开发数据库不存在，请先在 backend 目录执行 python -m alembic upgrade head')
-config = Config('alembic.ini')
-expected = set(ScriptDirectory.from_config(config).get_heads())
-with engine.connect() as connection:
-    current = set(MigrationContext.configure(connection).get_current_heads())
-if current != expected:
-    raise SystemExit('数据库迁移尚未完成，请先在 backend 目录执行 python -m alembic upgrade head')
-"""
 
 
 def free_port(port: int) -> bool:
@@ -85,6 +70,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="一键启动清源本地开发服务")
     parser.add_argument("--backend-port", type=int, default=8000)
     parser.add_argument("--frontend-port", type=int, default=5173)
+    parser.add_argument("--no-auto-migrate", action="store_true", help="只检查数据库版本，存在待执行迁移时停止启动")
     args = parser.parse_args()
     if any(port < 1 or port > 65535 for port in (args.backend_port, args.frontend_port)):
         print("端口必须在 1 至 65535 之间。", file=sys.stderr)
@@ -100,21 +86,36 @@ def main() -> int:
         if not free_port(port):
             print(f"端口 {port} 已被占用；请先停止占用该端口的服务，或指定其他端口。", file=sys.stderr)
             return 1
-    check = subprocess.run([str(VENV_PYTHON), "-c", MIGRATION_CHECK], cwd=BACKEND)
+    try:
+        env = database_environment(os.environ.copy())
+        target = database_target(env)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        print(f"PostgreSQL 配置或密码无效：{exc}", file=sys.stderr)
+        return 1
+    print(f"数据库目标：{target}", flush=True)
+    if not env.get("DATABASE_URL"):
+        print("当前使用本机 SQLite 开发数据库；要使用 PostgreSQL，请先运行 setup_postgres.py。", flush=True)
+    elif env["DATABASE_URL"].startswith(("postgresql:", "postgresql+psycopg:")):
+        print("当前使用 PostgreSQL 数据库。", flush=True)
+    else:
+        print("当前使用 DATABASE_URL 指定的数据库。", flush=True)
+    migration = [str(VENV_PYTHON), "-m", "wellspring.startup_migrations"]
+    if args.no_auto_migrate:
+        migration.append("--check-only")
+    check = subprocess.run(migration, cwd=BACKEND, env=env)
     if check.returncode != 0:
         return 1
-    env = os.environ.copy()
     env["VITE_API_TARGET"] = f"http://127.0.0.1:{args.backend_port}"
     flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
     children: list[subprocess.Popen] = []
     try:
         print("正在启动后端…", flush=True)
         backend = subprocess.Popen(
-            [str(VENV_PYTHON), "-m", "uvicorn", "wellspring.main:app", "--host", "127.0.0.1", "--port", str(args.backend_port)],
+            [str(VENV_PYTHON), "-m", "uvicorn", "wellspring.main:app", "--host", "127.0.0.1", "--port", str(args.backend_port), "--no-access-log"],
             cwd=BACKEND, env=env, creationflags=flags, start_new_session=os.name != "nt",
         )
         children.append(backend)
-        wait_ready(f"http://127.0.0.1:{args.backend_port}/api/health", backend)
+        wait_ready(f"http://127.0.0.1:{args.backend_port}/api/ready", backend)
         print("正在启动前端…", flush=True)
         frontend = subprocess.Popen(
             [node, str(VITE), "--host", "127.0.0.1", "--port", str(args.frontend_port), "--strictPort"],

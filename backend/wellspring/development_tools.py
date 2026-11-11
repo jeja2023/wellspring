@@ -62,7 +62,7 @@ def create_router(error,audit,page_result,request_id):
 
     @router.get("/audit/mine")
     def my_audit(request:Request,page:int=Query(1,ge=1,le=100000),page_size:int=Query(20,ge=1,le=100),user:User=Depends(current_user),db:Session=Depends(get_db)):
-        stmt=select(Audit).where(Audit.actor_id==user.id,Audit.org_id==user.org_id)
+        stmt=select(Audit).where(Audit.actor_id==user.id)
         total=db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
         rows=db.scalars(stmt.order_by(Audit.created_at.desc(),Audit.id.desc()).offset((page-1)*page_size).limit(page_size)).all()
         items=[]

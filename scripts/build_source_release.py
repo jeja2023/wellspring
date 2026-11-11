@@ -6,9 +6,18 @@ import re
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXED = ["README.md", "更新日志.md", "清源·禁毒全流程协同平台v2.5.0.md", "效果图.png", "start.py", ".gitignore", ".gitattributes", ".dockerignore", "backend/alembic.ini", "backend/requirements.txt", "backend/requirements-dev.txt", "frontend/package.json", "frontend/package-lock.json", "frontend/index.html", "frontend/tsconfig.json", "frontend/vite.config.ts"]
+FIXED = ["README.md", "更新日志.md", "清源·禁毒全流程协同平台v2.5.0.md", "效果图.png", "start.py", "migrate_dev.py", "setup_postgres.py", "rename_postgres.py", "local_config.py", ".env.example", ".gitignore", ".gitattributes", ".dockerignore", "backend/alembic.ini", "backend/requirements.txt", "backend/requirements-dev.txt", "frontend/package.json", "frontend/package-lock.json", "frontend/index.html", "frontend/tsconfig.json", "frontend/vite.config.ts"]
 TREES = {"backend/wellspring": {".py"}, "backend/migrations": {".py"}, "backend/tests": {".py"}, "frontend/src": {".ts", ".vue", ".css", ".svg"}, "frontend/tests": {".mjs"}, "docs": {".md"}, "deploy/offline": {".py", ".sh", ".yaml", ".md", ".conf"}, ".github/workflows": {".yml"}, "scripts": {".py"}}
-EXTRA = ["deploy/offline/Dockerfile.api", "deploy/offline/Dockerfile.web", "deploy/offline/env.example"]
+EXTRA = ["migrate.py", "deploy/offline/Dockerfile.app", "deploy/offline/env.example", "deploy/offline/env.windows.example", "backend/requirements.lock", "backend/requirements-dev.lock", "frontend/playwright.config.ts"]
+TREES["frontend/e2e"] = {".ts"}
+TREES["backend/migrations"].add(".mako")
+
+
+def safe_source(path):
+    if not path.is_file() or path.is_symlink() or not path.resolve().is_relative_to(ROOT.resolve()):
+        return False
+    return not any(parent.is_symlink() or (hasattr(parent, "is_junction") and parent.is_junction())
+                   for parent in path.parents if parent != ROOT and parent.is_relative_to(ROOT))
 
 
 def main():
@@ -25,7 +34,7 @@ def main():
     files = {ROOT / name for name in (*FIXED, *EXTRA)}
     for folder, extensions in TREES.items():
         files.update(p for p in (ROOT / folder).rglob("*") if p.is_file() and not p.is_symlink() and p.suffix in extensions and "__pycache__" not in p.parts)
-    missing = [str(p.relative_to(ROOT)) for p in files if not p.is_file() or p.is_symlink()]
+    missing = [str(p.relative_to(ROOT)) for p in files if not safe_source(p)]
     if missing:
         raise SystemExit(f"必要文件缺失或为符号链接: {missing}")
     out = ROOT / "releases" / f"wellspring-{version}-source.zip"

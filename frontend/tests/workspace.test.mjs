@@ -15,6 +15,85 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const ok = data => new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } })
 
+test('刷新后从服务端恢复身份和页面，退出清除会话', async () => {
+  const originalFetch = globalThis.fetch, originalStorage = globalThis.sessionStorage
+  const entries = new Map()
+  globalThis.sessionStorage = { getItem: key => entries.get(key) ?? null, setItem: (key,value) => entries.set(key,value), removeItem: key => entries.delete(key) }
+  try {
+    globalThis.fetch = async (url, options) => {
+      if (String(url).endsWith('/login')) return ok({token:'token-1',username:'admin',organization:'系统运维',is_admin:true})
+      if (String(url).endsWith('/session')) return ok({username:'admin',organization:'系统运维',is_admin:true})
+      if (String(url).endsWith('/logout')) return ok({ok:true})
+      return ok({items:[],total:0,has_more:false})
+    }
+    const first = createWorkspace()
+    first.username.value='admin'; first.password.value='password'
+    await first.login()
+    first.page.value='案件管理'
+    await new Promise(resolve=>setTimeout(resolve,0))
+    assert.equal(entries.get('wellspring.session'), 'token-1')
+    assert.equal([...entries.values()].includes('password'), false)
+    const refreshed = createWorkspace()
+    assert.equal(refreshed.restoring.value,true)
+    await refreshed.restoreSession()
+    assert.equal(refreshed.username.value,'admin')
+    assert.equal(refreshed.page.value,'案件管理')
+    assert.equal(refreshed.isAdmin.value,true)
+    await refreshed.logout()
+    assert.equal(entries.size,0)
+    assert.equal(refreshed.token.value,'')
+  } finally { globalThis.fetch=originalFetch; globalThis.sessionStorage=originalStorage }
+})
+
+test('角色权限决定菜单和预加载，导入不再单独占主导航',async()=>{
+ const original=globalThis.fetch,calls=[]
+ try{
+  globalThis.fetch=async(url,options)=>{
+   calls.push(String(url))
+   if(String(url).endsWith('/login'))return ok({token:'reader-token',username:'reader',organization:'A',is_admin:false,permissions:['cases.read','audit.read'],role_name:'只读'})
+   return ok({items:[],total:0,has_more:false})
+  }
+  const state=createWorkspace();state.username.value='reader';state.password.value='synthetic';await state.login()
+  assert.deepEqual(state.menu.value,['工作台','案件管理','智能解析','操作记录'])
+  assert.equal(state.can('cases.write'),false);assert.equal(state.can('system.users'),false)
+  assert.equal(calls.some(url=>url.includes('/evidence')),false)
+  assert.equal(state.menu.value.includes('数据导入'),false)
+ }finally{globalThis.fetch=original}
+})
+
+for (const [oldPage, expected] of [['案件管理','接警信息'],['业务案件','案件管理']]) {
+  test(`旧导航“${oldPage}”恢复到正确的新页面“${expected}”`,async()=>{
+    const originalFetch=globalThis.fetch, originalStorage=globalThis.sessionStorage
+    const entries=new Map([['wellspring.session','legacy-token'],['wellspring.page',oldPage]])
+    globalThis.sessionStorage={getItem:key=>entries.get(key)??null,setItem:(key,value)=>entries.set(key,value),removeItem:key=>entries.delete(key)}
+    try{
+      globalThis.fetch=async url=>String(url).endsWith('/session')?ok({username:'legacy',organization:'A',is_admin:false}):ok({items:[],total:0,has_more:false})
+      const state=createWorkspace();await state.restoreSession()
+      assert.equal(state.page.value,expected)
+      assert.equal(entries.get('wellspring.page.v2'),expected)
+      assert.equal(entries.has('wellspring.page'),false)
+    }finally{globalThis.fetch=originalFetch;globalThis.sessionStorage=originalStorage}
+  })
+}
+
+test('失效会话清理存储，网络故障保留会话并允许重试', async () => {
+  const originalFetch = globalThis.fetch, originalStorage = globalThis.sessionStorage
+  const entries = new Map([['wellspring.session','token-2']])
+  globalThis.sessionStorage = { getItem: key => entries.get(key) ?? null, setItem: (key,value) => entries.set(key,value), removeItem: key => entries.delete(key) }
+  try {
+    globalThis.fetch=async()=>{throw new Error('offline')}
+    const state=createWorkspace()
+    await state.restoreSession()
+    assert.match(state.restoreError.value,/重试/)
+    assert.equal(entries.get('wellspring.session'),'token-2')
+    globalThis.fetch=async()=>new Response(JSON.stringify({message:'会话已失效'}),{status:401})
+    await state.restoreSession()
+    assert.equal(entries.has('wellspring.session'),false)
+    assert.equal(state.token.value,'')
+    assert.match(state.error.value,/重新登录/)
+  } finally {globalThis.fetch=originalFetch;globalThis.sessionStorage=originalStorage}
+})
+
 test('成功写入后刷新失败时保留成功提示，防止误认为写入失败', async () => {
   const original = globalThis.fetch
   try {
@@ -292,4 +371,105 @@ test('盘点差异调查重试和复核提示不会声称余额调整', async ()
     assert.deepEqual(writes[1].body,{version:1,action:'SUBMIT',note:'调查说明'})
     assert.match(workspace.notice.value,/未调整账面余额/)
   } finally {globalThis.fetch=original}
+})
+const oldFetch = globalThis.fetch
+const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r }); return {promise, resolve} }
+
+test('旧账号延迟响应在退出并登录新账号后不能回写人员列表', async () => {
+  const old = deferred()
+  try {
+    globalThis.fetch = async (url) => String(url).includes('/person-drafts/search') ? old.promise : ok({ok:true})
+    const state = createWorkspace()
+    state.token.value = 'account-A'
+    const pending = state.persons.activate()
+    await state.logout()
+    state.token.value = 'account-B'
+    state.persons.people.value = [{id:'B-only',name:'新账号'}]
+    old.resolve(ok({items:[{id:'A-private',name:'旧账号'}],total:1}))
+    await pending
+    assert.equal(state.token.value, 'account-B')
+    assert.deepEqual(state.persons.people.value.map(x=>x.id), ['B-only'])
+    assert.equal(state.error.value, '')
+  } finally { globalThis.fetch = oldFetch }
+})
+
+test('迟到的旧写入响应不会清除新会话草稿或发起新会话刷新', async () => {
+  const old = deferred(); const calls = []
+  try {
+    globalThis.fetch = async (url,options) => {
+      calls.push(String(url))
+      if (String(url)==='/api/cases' && options.method==='POST') return old.promise
+      return ok({ok:true})
+    }
+    const state = createWorkspace(); state.token.value='A';state.caseNumber.value='A-draft';state.caseTitle.value='A-title'
+    const pending=state.makeCase()
+    await state.logout();state.token.value='B';state.caseNumber.value='B-draft';state.caseTitle.value='B-title'
+    old.resolve(ok({id:'A-created'}));await pending
+    assert.equal(state.caseNumber.value,'B-draft')
+    assert.equal(state.caseTitle.value,'B-title')
+    assert.equal(calls.some(x=>x.includes('/cases?')),false)
+    assert.equal(state.notice.value,'')
+  } finally { globalThis.fetch=oldFetch }
+})
+
+for (const order of [['a','b'],['b','a']]) test(`证物查询乱序 ${order.join('→')} 只显示当前证物流水`, async () => {
+  const replies={a:deferred(),b:deferred()}
+  try {
+    globalThis.fetch=async url=> {
+      const match=String(url).match(/\/evidence\/(a|b)\/events/)
+      return match ? replies[match[1]].promise : ok({items:[],total:0})
+    }
+    const state=createWorkspace();state.evidence.value=[{id:'a'},{id:'b'}]
+    const pending=[state.viewEvents('a'),state.viewEvents('b')]
+    for(const id of order) replies[id].resolve(ok({items:[{id:`${id}-event`}],total:1}))
+    await Promise.all(pending)
+    assert.equal(state.selected.value,'b')
+    assert.deepEqual(state.events.value.map(x=>x.id),['b-event'])
+  } finally {globalThis.fetch=oldFetch}
+})
+
+test('翻页和筛选失败保留页码、筛选条件以及列表的一致状态', async () => {
+  try {
+    globalThis.fetch=async()=>{throw new Error('offline')}
+    const state=createWorkspace()
+    state.cases.value=[{id:'c1'}];state.casePage.value=2;state.caseQuery.value='旧筛选'
+    state.evidence.value=[{id:'e1'}];state.evidencePage.value=2;state.selected.value='e1'
+    state.events.value=[{id:'event1'}];state.eventPage.value=2
+    await state.moveCase(1);await state.moveEvidence(1);await state.moveEvents(1)
+    assert.equal(state.casePage.value,2);assert.equal(state.evidencePage.value,2);assert.equal(state.eventPage.value,2)
+    assert.equal(state.selected.value,'e1');assert.equal(state.events.value[0].id,'event1')
+    state.search.value='新筛选';await state.searchCases()
+    assert.equal(state.caseQuery.value,'旧筛选');assert.equal(state.casePage.value,2)
+  } finally {globalThis.fetch=oldFetch}
+})
+
+test('多个并行操作中一个完成不能提前清除 loading', async () => {
+  const first=deferred(),second=deferred();const state=createWorkspace()
+  const a=state.run(()=>first.promise),b=state.run(()=>second.promise)
+  assert.equal(state.loading.value,true)
+  first.resolve();await a;assert.equal(state.loading.value,true)
+  second.resolve();await b;assert.equal(state.loading.value,false)
+})
+
+test('退出网络失败仍清理本机敏感状态', async () => {
+  try {
+    globalThis.fetch=async()=>{throw new Error('offline')}
+    const state=createWorkspace();state.token.value='A';state.persons.people.value=[{id:'A-private'}]
+    await state.logout()
+    assert.equal(state.token.value,'');assert.equal(state.persons.people.value.length,0)
+    assert.match(state.error.value,/本机登录信息已清除/)
+  } finally {globalThis.fetch=oldFetch}
+})
+
+test('旧账号退出响应迟到时不会登出已经重新登录的新账号',async()=>{
+ const original=globalThis.fetch;const reply=deferred()
+ try{
+  globalThis.fetch=async()=>reply.promise
+  const state=createWorkspace();state.token.value='A'
+  const pending=state.logout()
+  assert.equal(state.token.value,'')
+  state.token.value='B';state.persons.people.value=[{id:'B-private'}]
+  reply.resolve(ok({ok:true}));await pending
+  assert.equal(state.token.value,'B');assert.equal(state.persons.people.value[0].id,'B-private')
+ }finally{globalThis.fetch=original}
 })
