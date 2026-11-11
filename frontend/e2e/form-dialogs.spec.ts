@@ -7,7 +7,7 @@ test('新建表单统一弹窗、取消与焦点恢复、失败保留及成功�
  await page.getByLabel('密码',{exact:true}).fill('synthetic-test-password')
  await page.getByRole('button',{name:'登录系统'}).click()
  const nav=page.getByRole('navigation',{name:'主导航'})
- for(const [name,button,title] of [['案件管理','新建案件','新建案件草稿'],['人员档案','新建人员','新建人员草稿'],['情报线索','新建线索','新建线索草稿'],['证物管理','登记证物','登记原始证物'],['用户管理','新增用户','新增用户'],['角色管理','新增角色','新增角色'],['组织管理','新增组织','新增组织']]){
+ for(const [name,button,title] of [['案件管理','新建案件','新建案件草稿'],['人员档案','新建人员','新建人员草稿'],['情报线索','新建线索','新建线索草稿'],['用户管理','新增用户','新增用户'],['角色管理','新增角色','新增角色'],['组织管理','新增组织','新增组织']]){
   await nav.getByRole('button',{name,exact:true}).click()
   await expect(page.locator('.form-dialog')).toHaveCount(0)
   await expect(page.locator('.two-column')).toHaveCount(0)

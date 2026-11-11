@@ -5,3 +5,4 @@ SQLAlchemy==2.0.57
 alembic==1.20.1
 psycopg[binary]==3.3.8
 pydantic==2.14.3
+httpx==0.28.1

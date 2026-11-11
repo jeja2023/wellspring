@@ -49,6 +49,14 @@ def test_target_description_excludes_password_and_query_secrets():
     assert 'secret' not in target
 
 
+def test_ai_settings_forwarded_from_local_env_with_explicit_override(tmp_path):
+    (tmp_path/'.env').write_text('WELLSPRING_AI_API_KEY=synthetic-local-key\nWELLSPRING_AI_ALLOWED_HOSTS=127.0.0.1,model.internal\nUNRELATED=value\n',encoding='utf-8')
+    result=config.ai_environment({'DATABASE_URL':'sqlite://','WELLSPRING_AI_API_KEY':'explicit-key'},root=tmp_path)
+    assert result['WELLSPRING_AI_API_KEY']=='explicit-key'
+    assert result['WELLSPRING_AI_ALLOWED_HOSTS']=='127.0.0.1,model.internal'
+    assert result['DATABASE_URL']=='sqlite://' and 'UNRELATED' not in result
+
+
 @pytest.mark.parametrize('arguments,expected', [
     ([], ['-m', 'wellspring.startup_migrations', '--manual']),
     (['--check'], ['-m', 'alembic', 'check']),

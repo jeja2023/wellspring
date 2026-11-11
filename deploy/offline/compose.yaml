@@ -26,7 +26,7 @@ services:
       retries: 20
     restart: unless-stopped
   migrate:
-    image: ${APP_IMAGE:-wellspring/app:0.0.5}
+    image: ${APP_IMAGE:-wellspring/app:0.0.6}
     pull_policy: never
     profiles: [tools]
     command: ["migrate"]
@@ -39,7 +39,7 @@ services:
       db: { condition: service_healthy }
     restart: "no"
   bootstrap:
-    image: ${APP_IMAGE:-wellspring/app:0.0.5}
+    image: ${APP_IMAGE:-wellspring/app:0.0.6}
     pull_policy: never
     profiles: [tools]
     command: ["bootstrap"]
@@ -52,12 +52,21 @@ services:
       db: { condition: service_healthy }
     restart: "no"
   app:
-    image: ${APP_IMAGE:-wellspring/app:0.0.5}
+    image: ${APP_IMAGE:-wellspring/app:0.0.6}
     pull_policy: never
     environment:
       DB_USER: wellspring_app
       DB_PASSWORD_FILE: /run/secrets/runtime_password
+      WELLSPRING_AI_ALLOWED_HOSTS: ${AI_ALLOWED_HOSTS:-localhost,127.0.0.1,::1,host.docker.internal}
+      WELLSPRING_AI_API_KEY: ${AI_API_KEY:-}
+      WELLSPRING_MAP_TILE_DIR: ${MAP_TILE_DIR:-}
+      WELLSPRING_MAP_ATTRIBUTION: ${MAP_ATTRIBUTION:-本地授权底图}
     secrets: [runtime_password]
+    volumes:
+      - wellspring_ai_secrets:/app/.secrets
+      - wellspring_map_tiles:/app/map-tiles:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks: [backend]
     depends_on:
       db: { condition: service_healthy }
@@ -74,6 +83,8 @@ networks:
     internal: true
 volumes:
   wellspring_db:
+  wellspring_ai_secrets:
+  wellspring_map_tiles:
 secrets:
   db_owner_password:
     file: ${SECRETS_DIR:?请指定密钥目录}/db_owner_password

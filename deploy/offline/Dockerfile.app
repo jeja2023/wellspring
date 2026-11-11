@@ -13,7 +13,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY backend/requirements.lock ./requirements.lock
 RUN pip install --no-cache-dir --require-hashes -r requirements.lock \
-    && groupadd --system wellspring && useradd --system --gid wellspring --no-create-home wellspring
+    && groupadd --system wellspring && useradd --system --gid wellspring --no-create-home wellspring \
+    && mkdir -p /app/.secrets && chown wellspring:wellspring /app/.secrets && chmod 700 /app/.secrets
 COPY backend/wellspring ./wellspring
 COPY backend/migrations ./migrations
 COPY backend/alembic.ini ./alembic.ini

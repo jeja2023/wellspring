@@ -8,7 +8,6 @@ from time import perf_counter
 from functools import lru_cache
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -18,18 +17,17 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select, update, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DBSession
 
 from .db import get_db
-from .models import Audit, Case, Evidence, IdempotencyRecord, Organization, Session, User, WeightEvent
+from .models import Audit, Case, IdempotencyRecord, Organization, Session, User
 from .http_limits import RequestBudgetMiddleware, login_limiter
-from .types import weight_text
 from .access_policy import identity_json
 from .security import DUMMY_PASSWORD_HASH, PASSWORD_MAX_LENGTH, USERNAME_MAX_LENGTH, current_admin, current_user, new_token, token_hash, verify_password
 
-app = FastAPI(title="清源开发验证 API", version="0.0.5")
+app = FastAPI(title="清源开发验证 API", version="0.0.6")
 app.add_middleware(RequestBudgetMiddleware)
 
 class Login(BaseModel):
@@ -40,21 +38,8 @@ class CaseCreate(BaseModel):
     number: str = Field(min_length=1, max_length=80)
     title: str = Field(min_length=1, max_length=200)
 
-class EvidenceCreate(BaseModel):
-    case_id: str = Field(min_length=1, max_length=36)
-    label: str = Field(min_length=1, max_length=200)
-    weight: Decimal = Field(gt=0, max_digits=20, decimal_places=6)
-    reason: str = Field(min_length=1, max_length=1000)
-
-class Transfer(BaseModel):
-    source_version: int = Field(ge=1)
-    label: str = Field(min_length=1, max_length=200)
-    weight: Decimal = Field(gt=0, max_digits=20, decimal_places=6)
-    reason: str = Field(min_length=1, max_length=1000)
 
 SORTABLE_CASES = {"created_at": Case.created_at, "number": Case.number, "title": Case.title}
-SORTABLE_EVIDENCE = {"created_at": Evidence.created_at, "label": Evidence.label, "balance": Evidence.balance}
-SORTABLE_EVENTS = {"created_at": WeightEvent.created_at, "kind": WeightEvent.kind}
 IDEMPOTENCY_KEY_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{8,120}$")
 
 
@@ -117,30 +102,8 @@ def audit(db: DBSession, user: User, action: str, object_id: str):
     db.add(Audit(actor_id=user.id, org_id=user.org_id, action=action, object_id=object_id))
 
 
-def visible_case(db: DBSession, user: User, case_id: str) -> Case:
-    case = db.scalar(select(Case).where(Case.id == case_id, Case.org_id == user.org_id))
-    if not case:
-        raise api_error(404, "NOT_FOUND", "记录不存在或无权访问")
-    return case
-
-
-def visible_evidence(db: DBSession, user: User, evidence_id: str) -> Evidence:
-    item = db.scalar(select(Evidence).where(Evidence.id == evidence_id, Evidence.org_id == user.org_id))
-    if not item:
-        raise api_error(404, "NOT_FOUND", "记录不存在或无权访问")
-    return item
-
-
 def case_json(case: Case) -> dict[str, Any]:
     return {"id": case.id, "number": case.number, "title": case.title, "status": case.status, "created_at": case.created_at}
-
-
-def evidence_json(item: Evidence) -> dict[str, Any]:
-    return {"id": item.id, "case_id": item.case_id, "parent_id": item.parent_id, "label": item.label, "balance": str(item.balance), "version": item.version, "created_at": item.created_at}
-
-
-def event_json(event: WeightEvent) -> dict[str, Any]:
-    return {"id": event.id, "operation_id": event.operation_id, "kind": event.kind, "delta": str(event.delta), "reason": event.reason, "created_at": event.created_at}
 
 
 def page_result(items: list[dict[str, Any]], page: int, page_size: int, total: int, rid: str) -> dict[str, Any]:
@@ -337,132 +300,17 @@ def create_case(
     return payload
 
 
-@app.get("/api/evidence")
-def list_evidence(
-    request: Request,
-    q: str = Query(default="", max_length=100),
-    page: int = Query(default=1, ge=1, le=100000),
-    page_size: int = Query(default=20, ge=1, le=100),
-    sort: str = Query(default="created_at"),
-    order: Literal["asc", "desc"] = Query(default="desc"),
-    user: User = Depends(current_user),
-    db: DBSession = Depends(get_db),
-):
-    stmt = select(Evidence).where(Evidence.org_id == user.org_id)
-    if q.strip():
-        stmt = stmt.where(Evidence.label.contains(q.strip(), autoescape=True))
-    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    sort_columns = dict(SORTABLE_EVIDENCE)
-    if db.get_bind().dialect.name == "sqlite":
-        sort_columns["balance"] = Evidence.balance.collate("WELLSPRING_DECIMAL")
-    rows = db.scalars(sorted_statement(stmt, sort_columns, sort, order, Evidence.id).offset((page - 1) * page_size).limit(page_size)).all()
-    audit(db, user, "EVIDENCE_LIST", user.org_id)
-    db.commit()
-    return page_result([evidence_json(item) for item in rows], page, page_size, total, request_id(request))
-
-
-@app.post("/api/evidence", status_code=201)
-def create_evidence(
-    data: EvidenceCreate,
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
-    user: User = Depends(current_user),
-    db: DBSession = Depends(get_db),
-):
-    case = visible_case(db, user, data.case_id)
-    label, reason = data.label.strip(), data.reason.strip()
-    if not label or not reason:
-        raise api_error(422, "VALIDATION_ERROR", "名称和依据不能为空")
-    payload_input = {"case_id": case.id, "label": label, "weight": str(data.weight), "reason": reason}
-    record, replay = reserve_idempotency(db, user, "EVIDENCE_CREATE", idempotency_key, payload_input)
-    if replay:
-        return replay
-    item = Evidence(org_id=user.org_id, case_id=case.id, label=label, balance=data.weight)
-    db.add(item)
-    db.flush()
-    db.add(WeightEvent(operation_id=str(uuid4()), evidence_id=item.id, kind="INITIAL", delta=data.weight, actor_id=user.id, reason=reason))
-    payload = evidence_json(item)
-    audit(db, user, "EVIDENCE_CREATE", item.id)
-    finish_idempotency(record, payload, 201, item.id)
-    db.commit()
-    return payload
-
-
-@app.post("/api/evidence/{evidence_id}/samples", status_code=201)
-def sample(
-    evidence_id: str,
-    data: Transfer,
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
-    user: User = Depends(current_user),
-    db: DBSession = Depends(get_db),
-):
-    parent = visible_evidence(db, user, evidence_id)
-    if parent.parent_id:
-        raise api_error(409, "INVALID_SOURCE", "仅支持从原始证物分样")
-    label, reason = data.label.strip(), data.reason.strip()
-    if not label or not reason:
-        raise api_error(422, "VALIDATION_ERROR", "名称和依据不能为空")
-    payload_input = {"evidence_id": evidence_id, "label": label, "weight": str(data.weight), "reason": reason, "source_version": data.source_version}
-    record, replay = reserve_idempotency(db, user, "EVIDENCE_SAMPLE", idempotency_key, payload_input)
-    if replay:
-        return replay
-    enough = Evidence.balance >= data.weight
-    remaining = Evidence.balance - data.weight
-    if db.get_bind().dialect.name == "sqlite":
-        enough = func.wellspring_decimal_compare(Evidence.balance, weight_text(data.weight)) >= 0
-        remaining = func.wellspring_decimal_subtract(Evidence.balance, weight_text(data.weight))
-    result = db.execute(update(Evidence).where(Evidence.id == parent.id, Evidence.org_id == user.org_id, Evidence.version == data.source_version, enough).values(balance=remaining, version=Evidence.version + 1).execution_options(synchronize_session=False))
-    if result.rowcount != 1:
-        db.expire(parent)
-        current = db.get(Evidence, parent.id)
-        if current and current.version != data.source_version:
-            raise api_error(409, "VERSION_CONFLICT", "记录已被更新，请重新加载后再分样")
-        if current and current.balance < data.weight:
-            raise api_error(409, "INSUFFICIENT_BALANCE", "证物余额不足")
-        raise api_error(409, "VERSION_CONFLICT", "记录已被更新，请重新加载后再分样")
-    child = Evidence(org_id=user.org_id, case_id=parent.case_id, parent_id=parent.id, label=label, balance=data.weight)
-    db.add(child)
-    db.flush()
-    operation_id = str(uuid4())
-    db.add_all([
-        WeightEvent(operation_id=operation_id, evidence_id=parent.id, kind="SAMPLE_OUT", delta=-data.weight, actor_id=user.id, reason=reason),
-        WeightEvent(operation_id=operation_id, evidence_id=child.id, kind="SAMPLE_IN", delta=data.weight, actor_id=user.id, reason=reason),
-    ])
-    payload = evidence_json(child)
-    audit(db, user, "EVIDENCE_SAMPLE", parent.id)
-    finish_idempotency(record, payload, 201, child.id)
-    db.commit()
-    return payload
-
-
-@app.get("/api/evidence/{evidence_id}/events")
-def events(
-    evidence_id: str,
-    request: Request,
-    page: int = Query(default=1, ge=1, le=100000),
-    page_size: int = Query(default=20, ge=1, le=100),
-    sort: str = Query(default="created_at"),
-    order: Literal["asc", "desc"] = Query(default="asc"),
-    user: User = Depends(current_user),
-    db: DBSession = Depends(get_db),
-):
-    visible_evidence(db, user, evidence_id)
-    stmt = select(WeightEvent).where(WeightEvent.evidence_id == evidence_id)
-    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    rows = db.scalars(sorted_statement(stmt, SORTABLE_EVENTS, sort, order, WeightEvent.id).offset((page - 1) * page_size).limit(page_size)).all()
-    audit(db, user, "WEIGHT_EVENTS_VIEW", evidence_id)
-    db.commit()
-    return page_result([event_json(event) for event in rows], page, page_size, total, request_id(request))
-
-
 from .intelligence import create_router as create_intelligence_router
 app.include_router(create_intelligence_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
 
 from .clue_case_links import create_router as create_clue_case_links_router
 app.include_router(create_clue_case_links_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
 
-from .evidence_inventory import create_router as create_evidence_inventory_router
-app.include_router(create_evidence_inventory_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
 
+from .person_transfers import create_router as create_person_transfers_router
+app.include_router(create_person_transfers_router(api_error,audit,reserve_idempotency,finish_idempotency,page_result,request_id))
+from .person_records import create_router as create_person_records_router
+app.include_router(create_person_records_router(api_error,audit,reserve_idempotency,finish_idempotency,page_result,request_id))
 from .person_drafts import create_router as create_person_drafts_router
 app.include_router(create_person_drafts_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
 
@@ -472,8 +320,6 @@ app.include_router(create_case_relations_router(api_error, audit, reserve_idempo
 from .person_case_candidates import create_router as create_person_case_candidates_router
 app.include_router(create_person_case_candidates_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
 
-from .inventory_investigations import create_router as create_inventory_investigations_router
-app.include_router(create_inventory_investigations_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
 
 from .development_tools import create_router as create_development_tools_router
 app.include_router(create_development_tools_router(api_error, audit, page_result, request_id))
@@ -481,8 +327,6 @@ app.include_router(create_development_tools_router(api_error, audit, page_result
 from .case_imports import create_router as create_case_imports_router
 app.include_router(create_case_imports_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
 
-from .evidence_custody import create_router as create_evidence_custody_router
-app.include_router(create_evidence_custody_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
 
 from .case_information import create_router as create_case_information_router
 app.include_router(create_case_information_router(api_error, audit, reserve_idempotency, finish_idempotency, page_result, request_id))
@@ -495,3 +339,21 @@ app.include_router(create_intake_cases_router(api_error, audit, reserve_idempote
 
 from .administration import create_router as create_administration_router
 app.include_router(create_administration_router(api_error,audit,reserve_idempotency,finish_idempotency,page_result,request_id))
+
+from .dashboard import create_router as create_dashboard_router
+app.include_router(create_dashboard_router(audit))
+from .ai import create_router as create_ai_router
+app.include_router(create_ai_router(api_error,audit,reserve_idempotency,finish_idempotency,page_result,request_id))
+
+from .clue_deliveries import create_router as create_clue_deliveries_router
+app.include_router(create_clue_deliveries_router(api_error,audit,reserve_idempotency,finish_idempotency,page_result,request_id))
+from .clue_imports import create_router as create_clue_import_router
+app.include_router(create_clue_import_router(api_error,audit,reserve_idempotency,finish_idempotency,page_result,request_id))
+
+from .analysis_assets import create_router as create_analysis_router
+app.include_router(create_analysis_router(api_error,audit,reserve_idempotency,finish_idempotency,page_result,request_id))
+
+from .places import create_router as create_places_router
+app.include_router(create_places_router(api_error,audit,reserve_idempotency,finish_idempotency,page_result,request_id))
+from .geography import create_router as create_geography_router
+app.include_router(create_geography_router(api_error,audit,reserve_idempotency,finish_idempotency,page_result,request_id))

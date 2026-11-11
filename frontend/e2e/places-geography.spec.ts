@@ -1,0 +1,38 @@
+import {test,expect,type Page} from '@playwright/test'
+
+async function login(page:Page,user:string){await page.goto('/');await page.getByLabel('账号',{exact:true}).fill(user);await page.getByLabel('密码',{exact:true}).fill('synthetic-test-password');await page.getByRole('button',{name:'登录系统'}).click();await page.getByRole('navigation',{name:'主导航'}).waitFor()}
+async function openPlace(page:Page,name:string){await page.getByRole('navigation',{name:'主导航'}).getByRole('button',{name:'重点场所',exact:true}).click();await page.getByRole('row').filter({hasText:name}).getByRole('button',{name:'查看场所',exact:true}).click()}
+
+test('重点场所、巡查整改、独立事件核验及地图补点闭环',async({page},testInfo)=>{
+  test.setTimeout(90000)
+  const external:string[]=[];page.on('request',request=>{if(request.url().startsWith('http')&&!['127.0.0.1','localhost'].includes(new URL(request.url()).hostname))external.push(request.url())})
+  await page.setViewportSize({width:1440,height:1050});await login(page,'superadmin')
+  const name='合成场所-'+Date.now(),reviewer='place-review-'+Date.now()
+  await page.evaluate(async reviewer=>{const headers={Authorization:'Bearer '+sessionStorage.getItem('wellspring.session'),'Content-Type':'application/json','Idempotency-Key':crypto.randomUUID()};const identity=await(await fetch('/api/session',{headers})).json();const response=await fetch('/api/system/users',{method:'POST',headers,body:JSON.stringify({username:reviewer,password:'synthetic-test-password',org_id:identity.organization_id,is_admin:true})});if(!response.ok)throw Error(await response.text())},reviewer)
+  await page.getByRole('navigation',{name:'主导航'}).getByRole('button',{name:'重点场所',exact:true}).click();await page.getByRole('button',{name:'新增场所',exact:true}).click()
+  const editor=page.getByRole('dialog',{name:'新增重点场所',exact:true})
+  for(const [label,value] of [['场所编号','SYNTHETIC-'+Date.now()],['场所名称',name],['所属区域','合成区域'],['责任岗位 / 承办人','合成责任岗'],['场所地址','合成街道'],['纳入管理依据 / 用途说明','合成场所巡查计划']])await editor.getByLabel(label,{exact:true}).fill(value)
+  await editor.getByRole('button',{name:'保存场所',exact:true}).click();await expect(editor).toHaveCount(0);await expect(page.locator('.place-detail-header')).toContainText(name)
+  await page.getByRole('button',{name:'登记巡查',exact:true}).click();const inspection=page.getByRole('dialog',{name:'登记场所巡查',exact:true});await inspection.getByLabel('现场情况 / 发现问题',{exact:true}).fill('合成设施整改事项');await inspection.getByLabel('需要整改复查',{exact:true}).check();await inspection.getByLabel('整改期限',{exact:true}).fill('2099-01-01');await inspection.getByRole('button',{name:'保存巡查',exact:true}).click();await expect(inspection).toHaveCount(0)
+  await page.getByRole('button',{name:'记录复查',exact:true}).click();const completion=page.getByRole('dialog',{name:'记录整改复查结果',exact:true});await completion.getByLabel('办理意见 / 依据',{exact:true}).fill('合成复查已完成');await completion.getByRole('button',{name:'确认办理',exact:true}).click();await expect(completion).toHaveCount(0);await expect(page.getByRole('table',{name:'场所巡查记录'})).toContainText('已完成')
+  await page.getByRole('tab',{name:'事件处置',exact:true}).click();await page.getByRole('button',{name:'登记事件',exact:true}).click();const incident=page.getByRole('dialog',{name:'登记场所事件',exact:true})
+  await incident.getByLabel('事件标题',{exact:true}).fill('合成现场情况核对');await incident.getByLabel('信息来源',{exact:true}).fill('合成巡查');await incident.getByLabel('具体事实',{exact:true}).fill('合成现场情况，不含真实人员信息');await incident.getByLabel('资料引用 / 文书或报告编号',{exact:true}).fill('SYNTHETIC-MATERIAL');await incident.getByRole('button',{name:'保存待核验事件',exact:true}).click();await expect(incident).toHaveCount(0);await expect(page.getByRole('table',{name:'场所事件记录'})).toContainText('待核验')
+  await page.getByRole('button',{name:'退出',exact:true}).click();await login(page,reviewer);await openPlace(page,name);await page.getByRole('tab',{name:'事件处置',exact:true}).click();await page.getByRole('button',{name:'查看事件',exact:true}).click();await page.getByRole('button',{name:'核验确认',exact:true}).click()
+  const review=page.getByRole('dialog',{name:'核验确认事件',exact:true});await review.getByLabel('办理意见 / 依据',{exact:true}).fill('合成来源及资料引用已核对');await review.getByRole('button',{name:'确认办理',exact:true}).click();await expect(review).toHaveCount(0);await expect(page.getByRole('table',{name:'场所事件记录'})).toContainText('待处置')
+  await page.getByRole('button',{name:'地图定位',exact:true}).click();await expect(page.getByRole('region',{name:'业务点位地图'})).toBeVisible();await expect(page.locator('.map-sidebar')).toContainText(name);await page.getByRole('button',{name:'补录坐标',exact:true}).click()
+  await page.getByRole('region',{name:'业务点位地图'}).click({position:{x:150,y:150}});expect(await page.getByLabel('经度',{exact:true}).inputValue()).not.toBe('')
+  await page.getByLabel('经度',{exact:true}).fill('116.4');await page.getByLabel('纬度',{exact:true}).fill('39.9');await page.getByLabel('坐标来源 / 更正说明',{exact:true}).fill('合成 WGS84 测试坐标');await page.getByRole('button',{name:'保存坐标',exact:true}).click();await expect(page.locator('.map-coordinate-summary')).toContainText('116.4 / 39.9');await expect(page.locator('.business-map .business-point')).toHaveCount(1);await expect(page.getByRole('region',{name:'业务点位地图'})).toHaveClass(/leaflet-container/)
+  await expect(page.getByRole('button',{name:'查询当前范围',exact:true})).toBeVisible();await page.getByRole('button',{name:'查询当前范围',exact:true}).click();await expect(page.locator('.map-toolbar')).toContainText('当前范围');await page.getByRole('button',{name:'坐标历史',exact:true}).click();await expect(page.locator('.map-history')).toContainText('合成 WGS84 测试坐标');await page.screenshot({path:testInfo.outputPath('places-offline-coordinate-map.png'),fullPage:true})
+  await page.getByRole('button',{name:'查看业务',exact:true}).click();await expect(page.locator('.place-detail-header')).toContainText(name)
+  await page.setViewportSize({width:768,height:1000});await page.getByRole('button',{name:'地图定位',exact:true}).click();await expect(page.getByRole('region',{name:'业务点位地图'})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+  await page.getByRole('button',{name:'退出',exact:true}).click();await login(page,'alice');await expect(page.getByRole('navigation',{name:'主导航'}).getByRole('button',{name:'重点场所',exact:true})).toHaveCount(0);await expect(page.getByRole('navigation',{name:'主导航'}).getByRole('button',{name:'业务地图',exact:true})).toHaveCount(0)
+  expect(external).toEqual([])
+})
+
+test('离线底图使用带认证的本地瓦片请求',async({page})=>{
+  await login(page,'superadmin')
+  await page.route('**/api/geography/config',async route=>{const response=await route.fetch();await route.fulfill({response,json:{...(await response.json()),tiles_available:true}})})
+  const requested:string[]=[]
+  await page.route('**/api/geography/tiles/**',async route=>{expect(route.request().headers().authorization).toMatch(/^Bearer /);expect(new URL(route.request().url()).search).toBe('');requested.push(route.request().url());await route.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC','base64')})})
+  await page.getByRole('navigation',{name:'主导航'}).getByRole('button',{name:'业务地图',exact:true}).click();await expect(page.getByRole('region',{name:'业务点位地图'})).toBeVisible();await expect.poll(()=>requested.length).toBeGreaterThan(0);await expect(page.locator('.map-intro')).toContainText('离线底图');await expect.poll(()=>page.locator('.business-map canvas').evaluateAll(nodes=>nodes.some(node=>{const color=(node as HTMLCanvasElement).getContext('2d')!.getImageData(120,120,1,1).data;return color[0]===255&&color[1]===255&&color[2]===255}))).toBe(true)
+})

@@ -1,27 +1,19 @@
 <script setup lang="ts">
 import Pagination from '../../shared/components/Pagination.vue'
 import FormDialog from '../../shared/components/FormDialog.vue'
-
-const {can}=useWorkspace()
-import { onMounted, ref } from 'vue'
-import PersonCaseCandidates from './PersonCaseCandidates.vue'
-const selected=ref<{id:string;name:string;version:number}|null>(null)
-import { useWorkspace } from '../../app/workspace'
-const {persons,loading}=useWorkspace()
-const {people,page,total,name,source,searchInput,appliedSearch,search,clearSearch,activate,move,create}=persons
-function updatePersonVersion(version:number) {
-  if (!selected.value) return
-  selected.value.version=version
-  const row=people.value.find(person=>person.id===selected.value?.id)
-  if (row) row.version=version
-}
+import {computed,onMounted,reactive,ref} from 'vue'
+import {useWorkspace} from '../../app/workspace'
+import PersonDetail from './PersonDetail.vue'
+import PersonTransfers from './PersonTransfers.vue'
+import {states,types,verification,today} from './types'
+import './persons.css'
+const {can,persons,loading,error}=useWorkspace()
+const {people,page,total,name,source,searchInput,appliedSearch,view,chooseView,search,clearSearch,activate,move,create}=persons
+const selectedId=ref(''),creating=ref(false),inbox=ref(false),extra=reactive({document_type:'',document_number:'',birth_date:'',phone:'',address:''})
+const views=computed(()=>[{key:'all',name:'全部人员'},...(can('cases.read')?[{key:'case',name:'涉案人员'}]:[]),...(can('persons.health')?[{key:'drug',name:'吸毒人员'},{key:'treatment',name:'戒毒人员'}]:[]),{key:'unverified',name:'待核人员'}])
+async function choose(key:string){inbox.value=false;selectedId.value='';await chooseView(key)}
+async function submitCreate(){if(await create(can('persons.identity')?{document_type:extra.document_type||null,document_number:extra.document_number||null,birth_date:extra.birth_date||null,phone:extra.phone,address:extra.address}:{})){creating.value=false;Object.assign(extra,{document_type:'',document_number:'',birth_date:'',phone:'',address:''})}}
 onMounted(activate)
-const {error}=useWorkspace()
-const creating=ref(false)
-async function submitCreate(){if(await create())creating.value=false}
 </script>
-<template>
-
-  <div class="page-list"><section class="card"><div class="page-toolbar page-toolbar-actions"><button v-if="can('persons.write')" type="button" :disabled="loading" @click="error='';creating=true">新建人员</button></div><form @submit.prevent="search"><label>名称或来源<input v-model="searchInput" maxlength="100" placeholder="输入名称或来源"></label><div class="actions"><button :disabled="loading">查询</button><button type="button" class="secondary" :disabled="loading" @click="clearSearch">重置</button></div></form><p class="muted">仅在当前组织范围内筛选。</p><div class="table-wrap"><table><thead><tr><th scope="col" class="row-number">序号</th><th>名称</th><th>来源</th><th>核验状态</th><th>操作</th></tr></thead><tbody><tr v-for="(person, rowIndex) in people" :key="person.id"><td class="row-number">{{(page-1)*20+rowIndex+1}}</td><td>{{person.name}}</td><td>{{person.source}}</td><td>{{person.verification_status==='UNVERIFIED' ? '未核验' : '未知状态'}}</td><td><button class="link" :disabled="loading" v-if="can('cases.read')" @click="selected=person">候选案件</button></td></tr></tbody></table><p v-if="!people.length" class="empty">{{appliedSearch ? '没有符合条件的人员草稿' : '暂无人员草稿'}}</p></div><Pagination :page="page" :total="total" :loading="loading" @change="move($event-page)" /><PersonCaseCandidates v-if="selected" :key="selected.id" :person="selected" @close="selected=null" @updated="updatePersonVersion" /></section>
-  <FormDialog v-if="creating" title="新建人员草稿" :busy="loading" :error="error" @close="creating=false"><form v-if="can('persons.write')" @submit.prevent="submitCreate"><label>名称<input v-model="name" required maxlength="120" placeholder="请输入名称"></label><label>来源<input v-model="source" required maxlength="200" placeholder="请输入来源"></label><button :disabled="loading">创建草稿</button></form></FormDialog></div>
-</template>
+<template><div class="persons-page"><div class="person-tabs" role="tablist" aria-label="人员业务视图"><button v-for="item in views" :key="item.key" role="tab" :aria-selected="!inbox&&view===item.key" :class="{secondary:inbox||view!==item.key}" :disabled="loading" @click="choose(item.key)">{{item.name}}</button><button v-if="can('persons.transfer')" role="tab" :aria-selected="inbox" :class="{secondary:!inbox}" @click="inbox=true;selectedId=''">管辖交接</button></div><PersonTransfers v-if="inbox"/><template v-else><section class="card"><div class="page-toolbar page-toolbar-actions"><button v-if="can('persons.write')" :disabled="loading" @click="error='';creating=true">新建人员</button></div><form class="system-search" @submit.prevent="search"><label>名称或来源<input v-model="searchInput" maxlength="100" placeholder="输入名称或来源"></label><button :disabled="loading">查询</button><button type="button" class="secondary" :disabled="loading" @click="clearSearch">重置</button></form><p class="muted person-hint">同一人共用主档；涉案、吸毒事实和戒毒措施按独立记录核验。视图可交叉，不按姓名自动合并。</p><div class="table-wrap"><table><thead><tr><th scope="col" class="row-number">序号</th><th>名称</th><th>脱敏证件</th><th>身份核验</th><th>涉案情况</th><th>当前戒毒措施</th><th>责任单位</th><th>待办</th><th>操作</th></tr></thead><tbody><tr v-for="(person,index) in people" :key="person.id"><td class="row-number">{{(page-1)*20+index+1}}</td><td>{{person.name}}</td><td>{{person.document_mask||'未登记'}}</td><td>{{verification[person.verification_status]||'未核验'}}</td><td>{{person.case_count===null?'未授权':(person.case_count||0)+' 条正式关系'}}</td><td><span v-if="!person.health_visible">未授权</span><template v-else>{{person.current_measures?.map(row=>types.MEASURE[row.record_type]+' · '+states[row.state]).join('；')||'无当前已核验措施'}}<span v-if="person.current_measures?.some(row=>row.needs_end_check)" class="person-overdue"> · 到期待核对</span></template></td><td>{{person.responsible_org||'本组织'}}</td><td>{{person.task_count===null?'未授权':person.task_count||0}}</td><td><button class="link" :disabled="loading" @click="selectedId=person.id">查看档案</button></td></tr></tbody></table><p v-if="!people.length&&!loading" class="empty">{{appliedSearch?'没有符合条件的人员':'暂无人员档案'}}</p></div><Pagination :page="page" :total="total" :loading="loading" @change="move($event-page)"/></section><PersonDetail v-if="selectedId" :key="selectedId" :person-id="selectedId" @close="selectedId=''" @updated="activate"/></template>
+<FormDialog v-if="creating" title="新建人员草稿" :wide="true" :busy="loading" :error="error" @close="creating=false"><form @submit.prevent="submitCreate"><div class="person-form-grid"><label>名称<input v-model="name" required maxlength="120" placeholder="请输入名称"></label><label>来源<input v-model="source" required maxlength="200" placeholder="请输入来源"></label><template v-if="can('persons.identity')"><label>证件类型<select v-model="extra.document_type"><option value="">暂不填写</option><option value="NATIONAL_ID">居民身份证</option><option value="PASSPORT">护照</option><option value="OTHER">其他身份依据</option></select></label><label>证件 / 身份依据编号<input v-model="extra.document_number" maxlength="100" :required="!!extra.document_type"></label><label>出生日期<input v-model="extra.birth_date" type="date" :max="today()"></label><label>联系电话<input v-model="extra.phone" maxlength="100"></label></template></div><label v-if="can('persons.identity')">联系地址<textarea v-model="extra.address" maxlength="1000"></textarea></label><p class="muted person-hint">新档案为未核验；姓名相同可分别保存，提供相同证件时提示人工核对，不自动覆盖。</p><button :disabled="loading">创建草稿</button></form></FormDialog></div></template>

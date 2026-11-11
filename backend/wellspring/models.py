@@ -1,10 +1,9 @@
 from datetime import date, datetime, timezone
-from decimal import Decimal
 from uuid import uuid4
-from sqlalchemy import String, ForeignKey, DateTime, Numeric, Boolean, UniqueConstraint, Text, Integer, Date, Index, text, CheckConstraint
+from sqlalchemy import String, ForeignKey, Boolean, UniqueConstraint, Text, Integer, Date, Index, text
 from sqlalchemy.orm import Mapped, mapped_column
 from .db import Base
-from .types import ExactWeight, UTCDateTime
+from .types import UTCDateTime
 
 def uid(): return str(uuid4())
 def now(): return datetime.now(timezone.utc)
@@ -13,6 +12,7 @@ class Organization(Base):
     __tablename__ = "organizations"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     name: Mapped[str] = mapped_column(String(120), unique=True)
+    unit_type: Mapped[str] = mapped_column(String(20), default="OTHER", server_default="OTHER")
     parent_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id"), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     version: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
@@ -73,29 +73,6 @@ class CaseInformation(Base):
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
 
-class Evidence(Base):
-    __tablename__ = "evidence"
-    __table_args__ = (CheckConstraint("wellspring_decimal_valid(balance) = 1 AND wellspring_decimal_compare(balance, '0') >= 0", name="ck_evidence_exact_balance").ddl_if(dialect="sqlite"),)
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
-    case_id: Mapped[str] = mapped_column(ForeignKey("cases.id"))
-    parent_id: Mapped[str | None] = mapped_column(ForeignKey("evidence.id"), nullable=True)
-    label: Mapped[str] = mapped_column(String(200))
-    balance: Mapped[Decimal] = mapped_column(ExactWeight(), default=Decimal("0"))
-    version: Mapped[int] = mapped_column(default=1)
-    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
-
-class WeightEvent(Base):
-    __tablename__ = "weight_events"
-    __table_args__ = (CheckConstraint("wellspring_decimal_valid(delta) = 1", name="ck_weight_event_exact_delta").ddl_if(dialect="sqlite"),)
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    operation_id: Mapped[str] = mapped_column(String(36), index=True)
-    evidence_id: Mapped[str] = mapped_column(ForeignKey("evidence.id"), index=True)
-    kind: Mapped[str] = mapped_column(String(30))
-    delta: Mapped[Decimal] = mapped_column(ExactWeight())
-    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
-    reason: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
 
 class Audit(Base):
     __tablename__ = "audit_events"
@@ -134,6 +111,10 @@ class Clue(Base):
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     version: Mapped[int] = mapped_column(default=1)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
+    reference_no: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    priority: Mapped[str] = mapped_column(String(20), default="NORMAL", server_default="NORMAL")
+    suggested_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    import_batch_id: Mapped[str | None] = mapped_column(ForeignKey("clue_import_batches.id"), nullable=True)
 
 class InvestigationTask(Base):
     __tablename__ = "investigation_tasks"
@@ -166,6 +147,19 @@ class IntelligenceEvent(Base):
     note: Mapped[str] = mapped_column(Text)
     result_code: Mapped[str | None] = mapped_column(String(30), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
+    payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ClueImportBatch(Base):
+    __tablename__ = "clue_import_batches"
+    __table_args__ = (Index("ix_clue_import_org_created", "org_id", "created_at", "id"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"))
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    filename: Mapped[str] = mapped_column(String(200))
+    content_sha256: Mapped[str] = mapped_column(String(64))
+    total: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
 
 
 class ClueCaseLink(Base):
@@ -188,21 +182,6 @@ class ClueCaseLink(Base):
     revoke_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
-class EvidenceInventoryObservation(Base):
-    __tablename__ = "evidence_inventory_observations"
-    __table_args__ = (CheckConstraint("wellspring_decimal_valid(book_weight) = 1 AND wellspring_decimal_valid(observed_weight) = 1 AND wellspring_decimal_valid(difference) = 1 AND wellspring_decimal_compare(book_weight, '0') >= 0 AND wellspring_decimal_compare(observed_weight, '0') >= 0", name="ck_inventory_exact_weights").ddl_if(dialect="sqlite"),)
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
-    evidence_id: Mapped[str] = mapped_column(ForeignKey("evidence.id"), index=True)
-    book_weight: Mapped[Decimal] = mapped_column(ExactWeight())
-    observed_weight: Mapped[Decimal] = mapped_column(ExactWeight())
-    difference: Mapped[Decimal] = mapped_column(ExactWeight())
-    evidence_version: Mapped[int] = mapped_column(Integer)
-    note: Mapped[str] = mapped_column(Text)
-    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
-
-
 class PersonDraft(Base):
     __tablename__ = "person_drafts"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
@@ -213,6 +192,16 @@ class PersonDraft(Base):
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
     version: Mapped[int] = mapped_column(default=1)
+    document_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    document_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    phone: Mapped[str] = mapped_column(String(100), default='', server_default='')
+    address: Mapped[str] = mapped_column(Text, default='', server_default='')
+    responsible_org_id: Mapped[str | None] = mapped_column(ForeignKey('organizations.id'), nullable=True)
+    responsible_user_id: Mapped[str | None] = mapped_column(ForeignKey('users.id'), nullable=True)
+    verified_by: Mapped[str | None] = mapped_column(ForeignKey('users.id'), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    updated_by: Mapped[str | None] = mapped_column(ForeignKey('users.id'), nullable=True)
 
 
 class CaseRelation(Base):
@@ -272,31 +261,6 @@ class PersonCaseCandidateEvent(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
 
 
-class InventoryInvestigation(Base):
-    __tablename__ = "inventory_investigations"
-    __table_args__ = (UniqueConstraint("observation_id", name="uq_inventory_investigation_observation"),)
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
-    observation_id: Mapped[str] = mapped_column(ForeignKey("evidence_inventory_observations.id"), index=True)
-    status: Mapped[str] = mapped_column(String(30), default="OPEN")
-    investigator_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
-    last_submitter_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
-    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
-
-class InventoryInvestigationEvent(Base):
-    __tablename__ = "inventory_investigation_events"
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
-    investigation_id: Mapped[str] = mapped_column(ForeignKey("inventory_investigations.id"), index=True)
-    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
-    action: Mapped[str] = mapped_column(String(30))
-    before_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    after_status: Mapped[str] = mapped_column(String(30))
-    note: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
-
-
 class CaseImportBatch(Base):
     __tablename__ = "case_import_batches"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
@@ -323,48 +287,10 @@ class CaseImportRow(Base):
     case_id: Mapped[str | None] = mapped_column(ForeignKey("cases.id"), nullable=True)
 
 
-class EvidenceCustody(Base):
-    __tablename__ = "evidence_custody"
-    __table_args__ = (UniqueConstraint("evidence_id", name="uq_evidence_custody_evidence"),)
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
-    evidence_id: Mapped[str] = mapped_column(ForeignKey("evidence.id"), index=True)
-    custodian_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
-    version: Mapped[int] = mapped_column(Integer, default=1)
-    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
-
-class CustodyHandover(Base):
-    __tablename__ = "custody_handovers"
-    __table_args__ = (Index("uq_custody_handover_pending", "evidence_id", unique=True, sqlite_where=text("status = 'PENDING'"), postgresql_where=text("status = 'PENDING'")),)
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
-    evidence_id: Mapped[str] = mapped_column(ForeignKey("evidence.id"), index=True)
-    from_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
-    to_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
-    custody_version: Mapped[int] = mapped_column(Integer)
-    status: Mapped[str] = mapped_column(String(20), default="PENDING")
-    version: Mapped[int] = mapped_column(Integer, default=1)
-    note: Mapped[str] = mapped_column(Text)
-    response_note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
-    responded_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
-
-class CustodyEvent(Base):
-    __tablename__ = "custody_events"
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
-    evidence_id: Mapped[str] = mapped_column(ForeignKey("evidence.id"), index=True)
-    handover_id: Mapped[str | None] = mapped_column(ForeignKey("custody_handovers.id"), nullable=True)
-    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
-    action: Mapped[str] = mapped_column(String(30))
-    note: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
-
-
 # Match the migration indexes used by the scoped queries.
 Index('ix_cases_org_created', Case.org_id, Case.created_at, Case.id)
-Index('ix_evidence_org_created', Evidence.org_id, Evidence.created_at, Evidence.id)
 Index('ix_clues_org_created', Clue.org_id, Clue.created_at, Clue.id)
+Index('uq_clue_org_reference', Clue.org_id, Clue.reference_no, unique=True)
 Index('ix_people_org_created', PersonDraft.org_id, PersonDraft.created_at, PersonDraft.id)
 Index('ix_case_information_org_active_created', CaseInformation.org_id, CaseInformation.deleted_at, CaseInformation.created_at, CaseInformation.id)
 Index('ix_case_information_active_created', CaseInformation.deleted_at, CaseInformation.created_at, CaseInformation.id)
@@ -378,3 +304,8 @@ Index('ix_tasks_org_review_created', InvestigationTask.org_id, InvestigationTask
 from . import wastewater_models  # Register the independent monitoring tables.
 from . import intake_models
 from . import access_models
+from . import ai_models
+from . import intelligence_models
+from . import analysis_models
+from . import person_models
+from . import place_models

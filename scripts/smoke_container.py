@@ -13,12 +13,20 @@ from uuid import uuid4
 SEED_AND_SERVE = '''
 import os
 os.environ['DATABASE_URL'] = 'sqlite:////tmp/synthetic.db'
+os.environ['WELLSPRING_LOGIN_ACCOUNT_LIMIT'] = '1000'
+os.environ['WELLSPRING_LOGIN_IP_LIMIT'] = '1000'
 from alembic import command
 from alembic.config import Config
 command.upgrade(Config('/app/alembic.ini'), 'head')
 from wellspring.db import SessionLocal
 from wellspring.models import Organization, User
 from wellspring.security import password_hash
+from wellspring.ai_models import AiService
+server, _ = start_mock_model()
+os.environ['WELLSPRING_AI_ALLOWED_HOSTS'] = '127.0.0.1'
+os.environ['WELLSPRING_AI_SECRET_DIR'] = '/tmp/model-secrets'
+os.environ.pop('WELLSPRING_AI_API_KEY', None)
+os.environ.pop('WELLSPRING_AI_API_KEY_FILE', None)
 with SessionLocal() as db:
     org, other = Organization(name='浏览器回归组织'), Organization(name='隔离组织')
     db.add_all([org, other]); db.flush()
@@ -26,9 +34,16 @@ with SessionLocal() as db:
     db.add_all([User(username=name, org_id=organization.id, password_hash=encoded)
                 for name, organization in (('alice', org), ('receiver', org), ('outsider', other))])
     db.add(User(username="superadmin",org_id=org.id,password_hash=encoded,is_admin=True))
+    service = db.get(AiService, 'primary')
+    service.enabled = True
+    service.base_url = f'http://127.0.0.1:{server.server_port}/v1'
+    service.model = 'synthetic-model'
     db.commit()
 import uvicorn
-uvicorn.run('combined_app:app', host='0.0.0.0', port=8000, log_level='warning')
+try:
+    uvicorn.run('combined_app:app', host='0.0.0.0', port=8000, log_level='warning')
+finally:
+    server.shutdown(); server.server_close()
 '''
 
 
@@ -41,10 +56,11 @@ def main():
     if args.startup_timeout <= 0:
         parser.error('--startup-timeout must be positive')
     name = 'wellspring-smoke-' + uuid4().hex
+    mock_source = (Path(__file__).resolve().parent / 'mock_model_service.py').read_text(encoding='utf-8')
     subprocess.run(['docker', 'run', '--detach', '--rm', '--name', name,
                     '--tmpfs', '/tmp:rw,size=64m',
                     '-p', '127.0.0.1::8000', '--entrypoint', 'python', args.image,
-                    '-c', SEED_AND_SERVE], check=True, capture_output=True)
+                    '-c', mock_source + '\n' + SEED_AND_SERVE], check=True, capture_output=True)
     try:
         mapping = subprocess.run(['docker', 'port', name, '8000/tcp'], check=True, capture_output=True, text=True).stdout.strip()
         base = 'http://' + mapping

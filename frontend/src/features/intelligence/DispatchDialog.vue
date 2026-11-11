@@ -1,0 +1,14 @@
+<script setup lang="ts">
+import {onBeforeUnmount,onMounted,ref} from 'vue'
+import FormDialog from '../../shared/components/FormDialog.vue'
+import {useWorkspace} from '../../app/workspace'
+import {createLatestRequests,isCancelled} from '../../shared/api/client'
+const props=defineProps<{clueId?:string;parentId?:string;version:number;dueDate?:string|null;allowStation?:boolean;important?:boolean}>()
+const emit=defineEmits<{close:[];saved:[]}>()
+const {api,command,captureSession}=useWorkspace(),requests=createLatestRequests(api)
+const units=ref<{id:string;name:string;unit_type:string}[]>([]),recipient=ref(''),objective=ref(''),deadline=ref(props.dueDate||''),allowStation=ref(false),busy=ref(false),error=ref('')
+onMounted(async()=>{busy.value=true;try{const response=await requests.latest<{organizations:typeof units.value}>('options','/intelligence/delivery-options'+(props.parentId?'?parent_id='+props.parentId:''));units.value=response.organizations}catch(e){if(!isCancelled(e))error.value=e instanceof Error?e.message:'单位加载失败'}finally{busy.value=false}})
+onBeforeUnmount(()=>requests.dispose())
+async function save(){busy.value=true;error.value='';const valid=captureSession();try{await command('dispatch-'+(props.parentId||props.clueId),props.parentId?`/intelligence/deliveries/${props.parentId}/dispatch`:`/intelligence/clues/${props.clueId}/dispatch`,{version:props.version,recipient_org_id:recipient.value,objective:objective.value,due_date:deadline.value||null,allow_station:allowStation.value});if(valid())emit('saved')}catch(e){if(!isCancelled(e))error.value=e instanceof Error?e.message:'下发失败'}finally{busy.value=false}}
+</script>
+<template><FormDialog title="下发情报线索" :busy="busy" :error="error" @close="emit('close')"><form @submit.prevent="save"><label>接收单位<select v-model="recipient" required><option value="" disabled>选择下级单位</option><option v-for="unit in units.filter(item=>allowStation||item.unit_type!=='STATION')" :key="unit.id" :value="unit.id">{{unit.name}}（{{unit.unit_type==='STATION'?'派出所':unit.unit_type==='BRANCH'?'分局 / 大队':'市局 / 支队'}}）</option></select></label><p v-if="!units.length" class="muted">暂无可下发的下级单位，请在组织管理中维护组织类型和上级关系。</p><label>办理要求<textarea v-model="objective" maxlength="2000" required placeholder="填写核查目标、办理事项和反馈要求"></textarea></label><label>反馈期限<input v-model="deadline" type="date" :max="parentId?dueDate||undefined:undefined"></label><label class="check-label"><input v-model="allowStation" type="checkbox" :disabled="!!important||(!!parentId&&!allowStation&&props.allowStation===false)" @change="recipient=''">允许继续下发派出所</label><p class="muted">{{important?'重要线索禁止下发派出所。':parentId&&props.allowStation===false?'上级禁止下发派出所，该限制不能放宽。':'不勾选时，本次及后续流转均禁止下发派出所；可直接选择下级大队。'}}</p><button :disabled="busy||!units.length">确认下发</button></form></FormDialog></template>

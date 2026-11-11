@@ -1,4 +1,3 @@
-from decimal import Decimal
 from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
@@ -7,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from wellspring.db import Base, get_db
 from wellspring.main import app
-from wellspring.models import Organization, User, WeightEvent
+from wellspring.models import Organization, User
 from wellspring.security import password_hash
 
 @pytest.fixture
@@ -49,31 +48,10 @@ def test_scope_and_sessions(context):
     case = client.post("/api/cases",headers=headers(a),json={"number":"A-01","title":"示例案件"})
     assert case.status_code == 201
     assert client.get("/api/cases",headers=b).json()["items"] == []
-    assert client.post("/api/evidence",headers=headers(b),json={"case_id":case.json()["id"],"label":"示例","weight":"1","reason":"登记"}).status_code == 404
     assert client.post("/api/cases",headers=headers(a),json={"number":"A-01","title":"重复"}).status_code == 409
     assert client.post("/api/logout",headers=a).status_code == 200
     assert client.get("/api/cases",headers=a).status_code == 401
 
-def test_weight_transfer_is_conserved(context):
-    client, factory = context
-    a=auth(client,"alice")
-    case=client.post("/api/cases",headers=headers(a),json={"number":"A-01","title":"示例"}).json()
-    original=client.post("/api/evidence",headers=headers(a),json={"case_id":case["id"],"label":"原物","weight":"100.000000","reason":"初称"})
-    assert original.status_code == 201
-    item=original.json()
-    response=client.post(f"/api/evidence/{item['id']}/samples",headers=headers(a),json={"label":"检材","weight":"10.000000","reason":"分样","source_version":1})
-    assert response.status_code == 201
-    objects=client.get("/api/evidence",headers=a).json()["items"]
-    assert sum(Decimal(x["balance"]) for x in objects) == Decimal("100.000000")
-    assert sorted(Decimal(x["balance"]) for x in objects) == [Decimal("10"),Decimal("90")]
-    assert client.post(f"/api/evidence/{item['id']}/samples",headers=headers(a),json={"label":"超量","weight":"91","reason":"分样","source_version":2}).status_code == 409
-    assert client.post(f"/api/evidence/{item['id']}/samples",headers=headers(a),json={"label":"过精","weight":"0.0000001","reason":"分样","source_version":2}).status_code == 422
-    with factory() as db:
-        rows=db.scalars(select(WeightEvent)).all()
-        assert len(rows)==3
-        assert sum((x.delta for x in rows),Decimal(0))==Decimal("100")
-        transfer=[x for x in rows if x.kind.startswith("SAMPLE")]
-        assert len({x.operation_id for x in transfer}) == 1
 
 
 def test_pagination_and_validation(context):
@@ -103,36 +81,3 @@ def test_idempotency_and_stale_version(context):
     assert first.json() == replay.json() and replay.headers["X-Idempotent-Replay"] == "true"
     assert client.post("/api/cases",headers=case_headers,json={**case_body,"title":"不同"}).json()["code"] == "IDEMPOTENCY_CONFLICT"
     assert client.post("/api/cases",headers=a,json=case_body).status_code == 400
-    item = client.post("/api/evidence",headers=headers(a),json={"case_id":first.json()["id"],"label":"原物","weight":"100","reason":"初称"}).json()
-    sample_headers = headers(a)
-    body = {"label":"检材","weight":"10","reason":"分样","source_version":1}
-    first_sample = client.post(f"/api/evidence/{item['id']}/samples",headers=sample_headers,json=body)
-    replay_sample = client.post(f"/api/evidence/{item['id']}/samples",headers=sample_headers,json=body)
-    assert first_sample.status_code == replay_sample.status_code == 201
-    assert first_sample.json() == replay_sample.json()
-    stale = client.post(f"/api/evidence/{item['id']}/samples",headers=headers(a),json={**body,"label":"其他检材"})
-    assert stale.status_code == 409 and stale.json()["code"] == "VERSION_CONFLICT"
-    objects = client.get("/api/evidence",headers=a).json()["items"]
-    assert len(objects) == 2 and sum(Decimal(x["balance"]) for x in objects) == Decimal("100")
-    with factory() as db:
-        assert len(db.scalars(select(WeightEvent)).all()) == 3
-
-
-def test_evidence_replay_and_revoked_access(context):
-    client, factory = context
-    a, b = auth(client, "alice"), auth(client, "bob")
-    case = client.post("/api/cases",headers=headers(a),json={"number":"A-2","title":"示例"}).json()
-    saved_headers = headers(a)
-    body = {"case_id":case["id"],"label":"原物","weight":"5","reason":"初称"}
-    first = client.post("/api/evidence",headers=saved_headers,json=body)
-    replay = client.post("/api/evidence",headers=saved_headers,json=body)
-    assert first.status_code == replay.status_code == 201 and first.json() == replay.json()
-    assert client.get("/api/evidence",headers=b).json()["total"] == 0
-    assert client.get(f"/api/evidence/{first.json()['id']}/events",headers=b).status_code == 404
-    event_page = client.get(f"/api/evidence/{first.json()['id']}/events?page_size=1",headers=a).json()
-    assert event_page["total"] == 1 and event_page["request_id"]
-    with factory() as db:
-        user = db.scalar(select(User).where(User.username == "alice"))
-        user.active = False
-        db.commit()
-    assert client.post("/api/evidence",headers=saved_headers,json=body).status_code == 401

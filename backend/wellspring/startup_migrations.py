@@ -20,8 +20,7 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
-from . import models  # Register the SQLite decimal functions before connecting.
-from .types import register_sqlite_decimal
+from . import models  # Register current metadata before migration checks.
 
 BACKEND = Path(__file__).resolve().parents[1]
 LOCK_KEY = 6285783391490618963
@@ -136,7 +135,9 @@ def backup_database(connection, url, directory, current, target):
             with closing(sqlite3.connect(Path(url.database).resolve().as_uri() + "?mode=ro", uri=True)) as source:
                 with closing(sqlite3.connect(temporary)) as destination:
                     source.backup(destination)
-                    register_sqlite_decimal(destination, None)
+                    # Old schema CHECK functions belong to its historical migration only.
+                    if destination.execute("SELECT 1 FROM sqlite_master WHERE sql LIKE '%wellspring_decimal_valid%' LIMIT 1").fetchone():
+                        ScriptDirectory.from_config(configuration()).get_revision('0017').module.register_historical_functions(destination)
                     if destination.execute("PRAGMA integrity_check").fetchone() != ("ok",):
                         raise MigrationRefused("SQLite 备份完整性检查失败；本次不执行迁移")
         else:

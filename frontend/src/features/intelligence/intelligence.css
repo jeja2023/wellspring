@@ -1,0 +1,8 @@
+.intelligence-tabs{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 20px}.intelligence-flow{display:grid;gap:20px}.intelligence-flow .system-search select{margin-bottom:0}.intelligence-flow .system-search .check-label{margin:0 0 10px}.intelligence-flow table th,.intelligence-flow table td{white-space:nowrap}.flow-overdue{margin-left:6px;color:#b42318;font-size:12px}.flow-stages{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}.flow-stages span{background:#e9f3f2;color:#0e7770;padding:7px 12px;border-radius:4px;font-size:12px}.flow-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:0 0 24px}.flow-overview>div{display:flex;flex-direction:column;gap:7px}.flow-overview dt{color:#61778b;font-size:12px}.flow-overview dd{margin:0}.flow-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.8}.flow-timeline{list-style:none;margin:16px 0 0;padding:0}.flow-timeline li{border-left:2px solid #d8e5ea;margin-left:5px;padding:0 0 20px 18px}.flow-timeline strong{display:block}.flow-timeline small{display:block;margin-top:7px}.flow-timeline p{margin:10px 0 0}.flow-import-preview{max-height:360px;overflow:auto;margin:20px 0}
+@media(max-width:800px){.flow-overview{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.flow-import-panel input[hidden]{display:none}
+
+.flow-fields{border:0;padding:0;margin:0;min-width:0}
+
+.flow-stages .is-current{background:#153b5b;color:white;font-weight:600}

@@ -12,7 +12,7 @@ import sys
 import time
 from urllib.error import URLError
 from urllib.request import urlopen
-from local_config import database_environment, database_target
+from local_config import ai_environment, database_environment, database_target
 
 ROOT = Path(__file__).resolve().parent
 BACKEND = ROOT / "backend"
@@ -87,7 +87,7 @@ def main() -> int:
             print(f"端口 {port} 已被占用；请先停止占用该端口的服务，或指定其他端口。", file=sys.stderr)
             return 1
     try:
-        env = database_environment(os.environ.copy())
+        env = ai_environment(database_environment(os.environ.copy()))
         target = database_target(env)
     except (OSError, ValueError, KeyError, TypeError) as exc:
         print(f"PostgreSQL 配置或密码无效：{exc}", file=sys.stderr)

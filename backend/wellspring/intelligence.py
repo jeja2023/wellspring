@@ -9,12 +9,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from .db import get_db
 from .models import Clue, InvestigationTask, IntelligenceEvent, User
+from uuid import uuid4
 from .security import current_user
 
 class ClueCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
-    summary: str = Field(min_length=1, max_length=2000)
+    summary: str = Field(min_length=1, max_length=10000)
     source: str = Field(min_length=1, max_length=200)
+    reference_no:str|None=Field(default=None,min_length=1,max_length=80)
+    priority:Literal['NORMAL','IMPORTANT']='NORMAL'
+    suggested_due_date:date|None=None
 
 class ClueSearch(BaseModel):
     keyword: str = Field(default="", max_length=100)
@@ -79,7 +83,8 @@ def create_router(error, audit, reserve, finish, page_result, request_id):
         return value
 
     def clue_json(c):
-        return {"id":c.id,"title":c.title,"summary":c.summary,"source":c.source,"status":c.status,"created_by":c.created_by,"version":c.version,"created_at":c.created_at}
+        return {"id":c.id,"title":c.title,"summary":c.summary,"source":c.source,"status":c.status,"created_by":c.created_by,"version":c.version,"created_at":c.created_at,
+            "reference_no":c.reference_no,"priority":c.priority,"suggested_due_date":c.suggested_due_date}
 
     def task_json(t):
         return {"id":t.id,"clue_id":t.clue_id,"objective":t.objective,"assignee_id":t.assignee_id,"due_date":t.due_date,"status":t.status,"result":t.result_code,"version":t.version,"created_at":t.created_at}
@@ -144,9 +149,12 @@ def create_router(error, audit, reserve, finish, page_result, request_id):
     @router.post("/clues", status_code=201)
     def create_clue(data: ClueCreate, key: str | None = Header(None, alias="Idempotency-Key"), user: User = Depends(current_user), db: Session = Depends(get_db)):
         payload = {"title":clean(data.title),"summary":clean(data.summary),"source":clean(data.source)}
-        record,replay = reserve(db,user,"CLUE_CREATE",key,payload)
+        record,replay = reserve(db,user,"CLUE_CREATE",key,{**payload,"reference_no":data.reference_no,"priority":data.priority,"suggested_due_date":data.suggested_due_date})
         if replay: return replay
-        clue=Clue(org_id=user.org_id,created_by=user.id,status="DRAFT",version=1,**payload)
+        number=data.reference_no.strip() if data.reference_no else 'QB-'+uuid4().hex[:16].upper()
+        if not number:raise error(422,'VALIDATION_ERROR','线索编号不能只包含空格')
+        if db.scalar(select(Clue.id).where(Clue.org_id==user.org_id,Clue.reference_no==number)):raise error(409,'CLUE_NUMBER_EXISTS','本组织线索编号已存在')
+        clue=Clue(org_id=user.org_id,created_by=user.id,status="DRAFT",version=1,reference_no=number,priority=data.priority,suggested_due_date=data.suggested_due_date,**payload)
         db.add(clue); db.flush()
         event(db,user,clue.id,None,"CREATED",None,"DRAFT","线索草稿已创建")
         audit(db,user,"CLUE_CREATE",clue.id)

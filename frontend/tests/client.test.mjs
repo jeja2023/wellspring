@@ -10,6 +10,23 @@ compiled._compile(bundle.outputFiles[0].text,compiled.filename)
 const {request,ApiError,isCancelled,createRequestScope}=compiled.exports
 const ok=data=>new Response(JSON.stringify(data),{status:200})
 
+test('离线瓦片读取保留认证、二进制内容和结构化鉴权错误',async()=>{
+ const original=globalThis.fetch
+ try{
+  globalThis.fetch=async(url,options)=>{
+   assert.equal(url,'/api/geography/tiles/0/0/0.png');assert.equal(options.headers.get('Authorization'),'Bearer map-token')
+   assert.equal('responseType' in options,false)
+   return new Response(new Uint8Array([137,80,78,71]),{status:200,headers:{'Content-Type':'image/png'}})
+  }
+  const result=await request('/geography/tiles/0/0/0.png','map-token',{responseType:'blob'})
+  assert.deepEqual([...new Uint8Array(await result.arrayBuffer())],[137,80,78,71])
+  let expired=''
+  globalThis.fetch=async()=>new Response(JSON.stringify({code:'UNAUTHENTICATED',message:'登录已失效'}),{status:401})
+  await assert.rejects(request('/geography/tiles/0/0/0.png','map-token',{responseType:'blob',onUnauthorized:token=>expired=token}),error=>error instanceof ApiError&&error.code==='UNAUTHENTICATED')
+  assert.equal(expired,'map-token')
+ }finally{globalThis.fetch=original}
+})
+
 test('结构化错误保留请求编号并把导入字段转换为文件行号',async()=>{
  const original=globalThis.fetch
  try{

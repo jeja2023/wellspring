@@ -17,7 +17,7 @@ from sqlalchemy.orm import sessionmaker
 
 from wellspring.db import get_db
 from wellspring.main import app
-from wellspring.models import Audit, Case, Evidence, Organization, User, WeightEvent
+from wellspring.models import Audit, Case, Organization, User
 from wellspring.security import password_hash
 
 
@@ -106,14 +106,6 @@ def race(first, second):
         return [future.result(timeout=30) for future in pending]
 
 
-def item(client, auth, weight="100"):
-    case = command(client, "/api/cases", auth, {"number": uuid4().hex, "title": "虚构案件"})
-    assert case.status_code == 201
-    response = command(client, "/api/evidence", auth, {
-        "case_id": case.json()["id"], "label": "虚构证物", "weight": weight, "reason": "测试",
-    })
-    assert response.status_code == 201
-    return response.json()
 
 
 def test_same_idempotency_key_creates_one_case(pg_context):
@@ -130,55 +122,10 @@ def test_same_idempotency_key_creates_one_case(pg_context):
             Audit.actor_id == identities["alice"], Audit.action == "CASE_CREATE")) == 1
 
 
-def test_competing_samples_preserve_balance_and_events(pg_context):
-    client, factory, auth, _ = pg_context
-    source = item(client, auth["alice"])
-    path = f"/api/evidence/{source['id']}/samples"
-    body = {"source_version": 1, "label": "分样", "weight": "60", "reason": "测试"}
-    replies = race(*(lambda: command(client, path, auth["alice"], body) for _ in range(2)))
-    assert sorted(reply.status_code for reply in replies) == [201, 409]
-    with factory() as db:
-        balances = db.scalars(select(Evidence.balance).where(
-            (Evidence.id == source["id"]) | (Evidence.parent_id == source["id"]))).all()
-        assert sum(balances, Decimal(0)) == Decimal("100")
-        events = db.scalars(select(WeightEvent).where(WeightEvent.evidence_id == source["id"])).all()
-        assert len(events) == 2
 
 
-def test_numeric_extremes_and_cross_org_scope(pg_context):
-    client, factory, auth, _ = pg_context
-    source = item(client, auth["alice"], "99999999999999.999999")
-    response = command(client, f"/api/evidence/{source['id']}/samples", auth["alice"], {
-        "source_version": 1, "label": "微量", "weight": "0.000001", "reason": "测试",
-    })
-    assert response.status_code == 201
-    assert client.get(f"/api/evidence/{source['id']}/events", headers=auth["outsider"]).status_code == 404
-    with factory() as db:
-        balances = db.scalars(select(Evidence.balance).where(
-            (Evidence.id == source["id"]) | (Evidence.parent_id == source["id"]))).all()
-        assert sum(balances, Decimal(0)) == Decimal("99999999999999.999999")
 
 
-def test_handover_accept_reject_race_is_atomic(pg_context):
-    client, factory, auth, identities = pg_context
-    source = item(client, auth["alice"])
-    baseline = command(client, f"/api/evidence/{source['id']}/custody/baseline", auth["alice"],
-                       {"evidence_version": 1, "note": "测试基线"})
-    assert baseline.status_code == 201
-    handover = command(client, f"/api/evidence/{source['id']}/handovers", auth["alice"], {
-        "custody_version": 1, "to_user_id": identities["receiver"], "note": "测试交接",
-    })
-    assert handover.status_code == 201
-    path = f"/api/evidence/handovers/{handover.json()['id']}/respond"
-    replies = race(*(lambda action=action: command(client, path, auth["receiver"], {
-        "version": 1, "action": action, "note": "测试回应",
-    }) for action in ("ACCEPT", "REJECT")))
-    assert sorted(response.status_code for response in replies) == [200, 409]
-    accepted = next(response.json()["status"] for response in replies if response.status_code == 200)
-    state = client.get(f"/api/evidence/{source['id']}/custody", headers=auth["alice"]).json()
-    expected = identities["receiver"] if accepted == "ACCEPTED" else identities["alice"]
-    assert state["custody"]["custodian_id"] == expected
-    assert state["custody"]["version"] == 3 and state["pending"] is None
 
 
 def test_review_race_records_one_terminal_decision(pg_context):
@@ -232,7 +179,7 @@ def test_runtime_role_can_append_but_cannot_rewrite_history(pg_database):
         with pg_database.begin() as connection:
             connection.execute(text(f'SET LOCAL ROLE "{role}"'))
             connection.execute(text("DELETE FROM sessions WHERE false"))
-            connection.execute(text("UPDATE evidence SET version=version WHERE false"))
+            connection.execute(text("UPDATE cases SET status=status WHERE false"))
             connection.execute(text("UPDATE intake_case_links SET status=status, version=version WHERE false"))
         with pytest.raises(DBAPIError):
             with pg_database.begin() as connection:
@@ -282,49 +229,47 @@ def test_database_dump_restore_preserves_all_rows(pg_database, tmp_path):
         admin.dispose()
 
 
-def test_startup_upgrade_uses_real_backup_and_shared_migration_connection(pg_database, tmp_path, monkeypatch):
+@pytest.fixture
+def predecessor_database(pg_database):
+    address=pg_database.url.set(database='postgres')
+    owner=create_engine(address,isolation_level='AUTOCOMMIT')
+    name='wellspring_predecessor_'+uuid4().hex
+    with owner.connect() as connection:connection.execute(text(f'CREATE DATABASE "{name}"'))
+    url=address.set(database=name);engine=create_engine(url)
     from alembic import command
     from wellspring import startup_migrations as migration
-    config = migration.configuration()
-    with pg_database.begin() as connection:
-        config.attributes["connection"] = connection
-        command.downgrade(config, "0017")
-    config.attributes.pop("connection", None)
-    pg_database.dispose()  # Automatic local upgrade requires old clients to be closed.
-    snapshots = tmp_path / "snapshots"
-    assert migration.upgrade(pg_database.url, backup_dir=snapshots)
-    archive = next(snapshots.glob("*.dump"))
-    import hashlib
-    import json
-    record = json.loads(archive.with_suffix(".dump.json").read_text())
-    head = migration.ScriptDirectory.from_config(config).get_current_head()
-    assert record["from"] == ["0017"] and record["to"] == head
-    assert record["sha256"] == hashlib.sha256(archive.read_bytes()).hexdigest()
-    with pg_database.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == head
-        assert connection.scalar(text("SELECT count(*) FROM pg_indexes WHERE indexname='ix_cases_org_created'")) == 1
+    config=migration.configuration()
+    try:
+        with engine.begin() as connection:
+            config.attributes['connection']=connection;command.upgrade(config,'0017')
+        config.attributes.pop('connection',None);engine.dispose()
+        yield engine
+    finally:
+        engine.dispose()
+        with owner.connect() as connection:connection.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+        owner.dispose()
 
 
-def test_postgres_startup_lock_timeout_and_old_client_refusal(pg_database, tmp_path):
-    from alembic import command
+def test_startup_upgrade_uses_real_backup_and_shared_migration_connection(predecessor_database,tmp_path):
     from wellspring import startup_migrations as migration
-    with pg_database.connect() as connection:
+    engine=predecessor_database;snapshots=tmp_path/'snapshots'
+    assert migration.upgrade(engine.url,automatic=False,backup_dir=snapshots)
+    archive=next(snapshots.glob('*.dump'))
+    import hashlib,json
+    record=json.loads(archive.with_suffix('.dump.json').read_text())
+    assert record['from']==['0017'] and record['sha256']==hashlib.sha256(archive.read_bytes()).hexdigest()
+    with engine.connect() as connection:assert connection.scalar(text('SELECT version_num FROM alembic_version'))==record['to']
+
+
+def test_postgres_startup_lock_timeout_and_unsafe_migration_refusal(predecessor_database,tmp_path):
+    from wellspring import startup_migrations as migration
+    engine=predecessor_database
+    with engine.connect() as connection:
         with migration.postgres_lock(connection):
-            with pytest.raises(migration.MigrationRefused, match="等待超时"):
-                migration.upgrade(pg_database.url, backup_dir=tmp_path, lock_timeout=0)
-    config = migration.configuration()
-    with pg_database.begin() as connection:
-        config.attributes["connection"] = connection
-        command.downgrade(config, "0017")
-    config.attributes.pop("connection", None)
-    # A deliberately retained application connection must block automatic DDL.
-    with pg_database.connect() as old_client:
-        old_client.execute(text("SELECT 1"))
-        with pytest.raises(migration.MigrationRefused, match="其他连接"):
-            migration.upgrade(pg_database.url, backup_dir=tmp_path)
-    with pg_database.begin() as connection:
-        config.attributes["connection"] = connection
-        command.upgrade(config, "head")
+            with pytest.raises(migration.MigrationRefused,match='等待超时'):
+                migration.upgrade(engine.url,automatic=False,backup_dir=tmp_path,lock_timeout=0)
+    with pytest.raises(migration.MigrationRefused,match='未批准'):
+        migration.upgrade(engine.url,backup_dir=tmp_path)
 
 
 def test_wastewater_numeric_and_review_race(pg_context):

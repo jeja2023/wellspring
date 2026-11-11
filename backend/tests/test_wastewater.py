@@ -150,7 +150,7 @@ def test_new_module_migration_preserves_existing_database_and_checks_metadata(tm
     run("-m", "alembic", "upgrade", "0018")
     with sqlite3.connect(database) as connection:
         connection.execute("INSERT INTO organizations (id,name) VALUES ('preserved', '合成历史组织')")
-    run("-c", "from pathlib import Path; from wellspring.startup_migrations import upgrade; import os; upgrade(os.environ['DATABASE_URL'], backup_dir=Path('" + tmp_path.as_posix() + "/snapshots'))")
+    run("-c", "from pathlib import Path; from wellspring.startup_migrations import upgrade; import os; upgrade(os.environ['DATABASE_URL'], automatic=False, backup_dir=Path('" + tmp_path.as_posix() + "/snapshots'))")
     with sqlite3.connect(database) as connection:
         from wellspring.main import expected_schema_heads
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == tuple(expected_schema_heads())

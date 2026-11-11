@@ -1,0 +1,32 @@
+import {test,expect,type Page} from '@playwright/test'
+
+async function login(page:Page,user:string){await page.goto('/');await page.getByLabel('账号',{exact:true}).fill(user);await page.getByLabel('密码',{exact:true}).fill('synthetic-test-password');await page.getByRole('button',{name:'登录系统'}).click();await page.getByRole('navigation',{name:'主导航'}).waitFor()}
+async function open(page:Page,name:string){await page.getByRole('navigation',{name:'主导航'}).getByRole('button',{name:'人员档案',exact:true}).click();await page.getByRole('row').filter({hasText:name}).getByRole('button',{name:'查看档案',exact:true}).click();await expect(page.locator('.person-detail h2')).toHaveText(name)}
+
+test('人员独立身份核验、社区戒毒措施、执行事件、到期待办及敏感权限隔离',async({page},testInfo)=>{
+  test.setTimeout(90000)
+  await page.setViewportSize({width:1440,height:1000});await login(page,'superadmin')
+  const stamp=Date.now().toString(),name='合成人员主档-'+stamp,reviewer='person-review-'+stamp
+  await page.evaluate(async(reviewer)=>{
+    const headers={Authorization:'Bearer '+sessionStorage.getItem('wellspring.session'),'Content-Type':'application/json','Idempotency-Key':crypto.randomUUID()}
+    const identity=await(await fetch('/api/session',{headers})).json()
+    const response=await fetch('/api/system/users',{method:'POST',headers,body:JSON.stringify({username:reviewer,password:'synthetic-test-password',org_id:identity.organization_id,is_admin:true})})
+    if(!response.ok)throw Error(await response.text())
+  },reviewer)
+  await page.getByRole('navigation',{name:'主导航'}).getByRole('button',{name:'人员档案',exact:true}).click()
+  await page.getByRole('button',{name:'新建人员',exact:true}).click();const create=page.getByRole('dialog',{name:'新建人员草稿',exact:true})
+  await create.getByLabel('名称',{exact:true}).fill(name);await create.getByLabel('来源',{exact:true}).fill('合成来源');await create.getByRole('combobox',{name:'证件类型',exact:true}).selectOption('OTHER');await create.getByLabel('证件 / 身份依据编号',{exact:true}).fill('SYNTHETIC-'+stamp);await create.getByRole('button',{name:'创建草稿',exact:true}).click();await expect(create).toHaveCount(0)
+  await open(page,name);await expect(page.locator('.person-detail')).toContainText('身份未核验')
+  await page.getByRole('button',{name:'退出',exact:true}).click();await login(page,reviewer);await open(page,name)
+  await page.getByRole('button',{name:'核验身份',exact:true}).click();const review=page.getByRole('dialog',{name:'核验人员身份',exact:true})
+  await review.getByLabel('依据文书 / 核验编号',{exact:true}).fill('SYNTHETIC-ID-CHECK');await review.getByLabel('办理意见',{exact:true}).fill('合成身份已核对');await review.getByRole('button',{name:'确认记录',exact:true}).click();await expect(review).toHaveCount(0);await expect(page.locator('.person-detail')).toContainText('身份已核验')
+  await page.getByRole('button',{name:'退出',exact:true}).click();await login(page,'superadmin');await open(page,name)
+  await page.getByRole('tab',{name:'戒毒措施',exact:true}).click();await page.getByRole('button',{name:'登记戒毒措施',exact:true}).click();const measure=page.getByRole('dialog',{name:'登记戒毒措施',exact:true})
+  await measure.getByRole('combobox',{name:'业务类型',exact:true}).selectOption('COMMUNITY');await measure.getByLabel('决定日期',{exact:true}).fill('2026-10-01');await measure.getByLabel('信息来源',{exact:true}).fill('合成决定资料');await measure.getByLabel('依据文书 / 报告编号',{exact:true}).fill('SYNTHETIC-TREATMENT');await measure.getByLabel('登记依据与说明',{exact:true}).fill('合成文书与执行资料');await measure.getByLabel('预计结束日期',{exact:true}).fill('2026-11-01');await measure.getByLabel('决定机关',{exact:true}).fill('合成决定机关');await measure.getByLabel('实际执行机构',{exact:true}).fill('合成街道执行机构');await measure.getByLabel('报到 / 执行核对日期',{exact:true}).fill('2026-10-15');await measure.getByRole('button',{name:'保存待核验记录',exact:true}).click();await expect(measure).toHaveCount(0)
+  await page.getByRole('button',{name:'退出',exact:true}).click();await login(page,reviewer);await open(page,name);await page.getByRole('tab',{name:'戒毒措施',exact:true}).click();await page.getByRole('button',{name:'核验 / 撤销',exact:true}).click();const recordReview=page.getByRole('dialog',{name:'核验业务记录',exact:true});await recordReview.getByLabel('依据文书 / 核验编号',{exact:true}).fill('SYNTHETIC-RECORD-CHECK');await recordReview.getByLabel('办理意见',{exact:true}).fill('合成决定与执行资料已核对');await recordReview.getByRole('button',{name:'确认记录',exact:true}).click();await expect(recordReview).toHaveCount(0);await expect(page.locator('.person-detail')).toContainText('已决定 / 待执行')
+  await page.getByRole('button',{name:'登记执行',exact:true}).click();const execute=page.getByRole('dialog',{name:'登记措施执行事件',exact:true});await execute.getByRole('combobox',{name:'办理动作',exact:true}).selectOption('REPORT');await execute.getByLabel('实际发生日期',{exact:true}).fill('2026-10-10');await execute.getByLabel('依据文书 / 核验编号',{exact:true}).fill('SYNTHETIC-REPORT');await execute.getByLabel('办理意见',{exact:true}).fill('合成实际报到资料');await execute.getByRole('button',{name:'确认记录',exact:true}).click();await expect(execute).toHaveCount(0);await expect(page.locator('.person-detail')).toContainText('执行中')
+  await page.getByRole('tab',{name:'待办事项',exact:true}).click();const taskRow=page.locator('.person-detail').getByRole('row').filter({hasText:'核对措施期限及解除依据'});await expect(taskRow).toContainText('逾期');await taskRow.getByRole('button',{name:'处理',exact:true}).click();const task=page.getByRole('dialog',{name:'核对人员待办',exact:true});await task.getByLabel('核对结果',{exact:true}).fill('已核对日期，尚无解除依据');await task.getByRole('button',{name:'记录处理结果',exact:true}).click();await expect(task).toHaveCount(0)
+  await page.getByRole('tab',{name:'基础信息',exact:true}).click();await expect(page.locator('.person-detail')).toContainText('社区戒毒 · 执行中');await page.screenshot({path:testInfo.outputPath('person-profile-verified-measure.png'),fullPage:true})
+  await page.setViewportSize({width:768,height:1000});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+  await page.getByRole('button',{name:'退出',exact:true}).click();await login(page,'alice');await open(page,name);await expect(page.getByRole('tab',{name:'戒毒措施',exact:true})).toHaveCount(0);await expect(page.locator('.person-detail')).not.toContainText('SYNTHETIC-'+stamp);await expect(page.locator('.person-detail')).toContainText('未授权')
+})

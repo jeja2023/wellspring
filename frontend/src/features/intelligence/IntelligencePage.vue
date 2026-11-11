@@ -1,38 +1,45 @@
 <script setup lang="ts">
 import Pagination from '../../shared/components/Pagination.vue'
 import FormDialog from '../../shared/components/FormDialog.vue'
+import DeliveryWorkspace from './DeliveryWorkspace.vue'
+import DispatchDialog from './DispatchDialog.vue'
+import ClueImportPanel from './ClueImportPanel.vue'
+import './intelligence.css'
 
 const {can}=useWorkspace()
 import { onMounted,ref } from 'vue'
 import { useWorkspace } from '../../app/workspace'
 const { intelligence: state, loading } = useWorkspace()
-const {clues,total,page,searchInput,statusInput,appliedSearch,appliedStatus,searchClues,resetClueSearch,selected,eventPage,people,caseChoices,casePage,caseTotal,caseSearch,caseId,linkBasis,caseLinks,linkPage,linkTotal,revokeId,revokeReason,reassigning,reassignee,reassignReason,reassignTask,searchLinkCases,nextLinkCases,nextLinks,createCaseLink,revokeCaseLink,title,summary,source,reviewNote,objective,assignee,dueDate,transitionNote,result,actorId,activate,show,nextPage,nextEvents,create,review,createTask,transition} = state
-const clueStatus: Record<string,string> = { DRAFT:'待核验', REVIEWED:'已核验（开发验证）' }
+const {referenceNo,priority,suggestedDueDate,clues,total,page,searchInput,statusInput,appliedSearch,appliedStatus,searchClues,resetClueSearch,selected,eventPage,people,caseChoices,casePage,caseTotal,caseSearch,caseId,linkBasis,caseLinks,linkPage,linkTotal,revokeId,revokeReason,reassigning,reassignee,reassignReason,reassignTask,searchLinkCases,nextLinkCases,nextLinks,createCaseLink,revokeCaseLink,title,summary,source,reviewNote,objective,assignee,dueDate,transitionNote,result,actorId,activate,show,nextPage,nextEvents,create,review,createTask,transition} = state
+const clueStatus: Record<string,string> = { DRAFT:'待核验', REVIEWED:'已核验 / 可下发' }
 const taskStatus: Record<string,string> = { OPEN:'待办理', PENDING_REVIEW:'待复核', RETURNED:'已退回', CLOSED:'已关闭' }
 const actions: Record<string,string> = {CREATED:'创建草稿', REVIEWED:'人工核验', TASK_CREATED:'创建工单', CASE_LINKED:'关联案件', CASE_LINK_REVOKED:'撤销案件关联', REASSIGN:'重新分派', SUBMIT:'提交核查', RETURN:'退回复核', CLOSE:'复核关闭'}
 const results: Record<string,string> = {VERIFIED:'已核实',NO_FINDING:'未发现',INSUFFICIENT:'信息不足',DUPLICATE:'重复线索',TRANSFER:'转其他单位',CONTINUE:'待继续核查'}
 const name = (id:string) => people.value.find(p=>p.id===id)?.username ?? '本组织用户'
 onMounted(activate)
 const {error}=useWorkspace()
-const creating=ref(false)
+const creating=ref(false),dispatching=ref(false),tab=ref<'clues'|'received'|'sent'|'imports'>('clues')
+async function dispatched(){dispatching.value=false;if(selected.value)await show(selected.value.clue.id)}
 async function submitCreate(){if(await create())creating.value=false}
 </script>
 
 <template>
-
-  <div class="page-list">
+  <div class="intelligence-tabs" role="group" aria-label="情报线索工作区"><button :class="{secondary:tab!=='clues'}" @click="tab='clues'">本级线索</button><button :class="{secondary:tab!=='received'}" @click="tab='received'">收到的线索</button><button :class="{secondary:tab!=='sent'}" @click="tab='sent'">我下发的线索</button><button v-if="can('intelligence.import')" :class="{secondary:tab!=='imports'}" @click="tab='imports'">Excel 导入 / 记录</button></div>
+  <DeliveryWorkspace v-if="tab==='received'||tab==='sent'" :key="tab" :scope="tab" />
+  <ClueImportPanel v-else-if="tab==='imports'" @imported="activate" />
+  <div v-else class="page-list">
     <section class="card">
       <div class="page-toolbar page-toolbar-actions"><button v-if="can('intelligence.write')" type="button" :disabled="loading" @click="error='';creating=true">新建线索</button></div>
       <form @submit.prevent="searchClues"><label>标题或来源<input v-model="searchInput" maxlength="100" placeholder="输入标题或来源"></label><label>核验状态<select v-model="statusInput"><option value="">全部状态</option><option value="DRAFT">待核验</option><option value="REVIEWED">已核验（开发验证）</option></select></label><div class="actions"><button :disabled="loading">查询</button><button type="button" class="secondary" :disabled="loading" @click="resetClueSearch">重置</button></div></form>
       <p class="muted">仅在当前组织中按标题或来源筛选；摘要不参与搜索。</p>
-      <div class="table-wrap"><table><thead><tr><th scope="col" class="row-number">序号</th><th>标题</th><th>来源</th><th>状态</th><th>操作</th></tr></thead>
-        <tbody><tr v-for="(clue, rowIndex) in clues" :key="clue.id"><td class="row-number">{{(page-1)*20+rowIndex+1}}</td><td>{{clue.title}}</td><td>{{clue.source}}</td><td>{{clueStatus[clue.status] || '未知状态'}}</td><td><button class="link" :disabled="loading" @click="show(clue.id)">查看</button></td></tr></tbody></table>
+      <div class="table-wrap"><table><thead><tr><th scope="col" class="row-number">序号</th><th>线索编号</th><th>标题</th><th>来源</th><th>重要程度</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody><tr v-for="(clue, rowIndex) in clues" :key="clue.id"><td class="row-number">{{(page-1)*20+rowIndex+1}}</td><td>{{clue.reference_no||'历史线索'}}</td><td>{{clue.title}}</td><td>{{clue.source}}</td><td>{{clue.priority==='IMPORTANT'?'重要':'普通'}}</td><td>{{clueStatus[clue.status] || '未知状态'}}</td><td><button class="link" :disabled="loading" @click="show(clue.id)">查看</button></td></tr></tbody></table>
         <p v-if="!clues.length" class="empty">{{appliedSearch || appliedStatus ? '没有符合条件的线索' : '暂无线索'}}</p></div>
       <Pagination :page="page" :total="total" :loading="loading" @change="nextPage($event-page)" />
       <div v-if="selected" class="detail">
         <h2>{{selected.clue.title}}</h2><p><b>来源：</b>{{selected.clue.source}}</p><p><b>摘要：</b>{{selected.clue.summary}}</p><p><b>状态：</b>{{clueStatus[selected.clue.status] || '未知状态'}} · 版本 {{selected.clue.version}}</p>
         <form v-if="selected.clue.status==='DRAFT'" v-show="can('intelligence.write')" @submit.prevent="review"><h3>人工核验</h3><label>核验说明<input v-model="reviewNote" required maxlength="1000"></label><button :disabled="loading">记录核验</button></form>
-        <form v-if="selected.clue.status==='REVIEWED' && !selected.task" v-show="can('intelligence.write')" @submit.prevent="createTask"><h3>创建核查工单</h3><label>核查目标<textarea v-model="objective" required maxlength="1000"></textarea></label><label>本组织承办人<select v-model="assignee" required><option value="" disabled>选择承办人</option><option v-for="person in people" :key="person.id" :value="person.id">{{person.username}}</option></select></label><label>办理期限（可选）<input v-model="dueDate" type="date"></label><p class="muted">手动填写日期；系统不会自动认定任务完成或生成超期提醒。</p><button :disabled="loading">创建工单</button></form>
+        <div v-if="selected.clue.status==='REVIEWED'" class="actions"><button v-if="can('intelligence.dispatch')" type="button" :disabled="loading" @click="dispatching=true">下发线索至下级单位</button><button class="secondary" @click="tab='sent'">查看下发及反馈</button></div>
         <div v-if="selected.task"><h3>核查工单</h3><p><b>目标：</b>{{selected.task.objective}}</p><p><b>承办人：</b>{{name(selected.task.assignee_id)}}</p><p><b>办理期限：</b>{{selected.task.due_date || '未设置'}}</p><p><b>状态：</b>{{taskStatus[selected.task.status] || '未知状态'}}</p><p v-if="selected.task.result"><b>核查结果：</b>{{results[selected.task.result] || '未知结果'}}</p>
           <div v-if="selected.task.status==='OPEN' || selected.task.status==='RETURNED'">
             <button v-if="!reassigning" type="button" class="secondary" :disabled="loading" @click="reassigning=true">重新分派</button>
@@ -58,6 +65,7 @@ async function submitCreate(){if(await create())creating.value=false}
         <Pagination :page="eventPage" :total="selected.events.total" :loading="loading" :has-more="selected.events.has_more" @change="nextEvents($event-eventPage)" />
       </div>
     </section>
-    <FormDialog v-if="creating" title="新建线索草稿" :busy="loading" :error="error" @close="creating=false"><form v-if="can('intelligence.write')" @submit.prevent="submitCreate"><label>标题<input v-model="title" required maxlength="200"></label><label>来源<input v-model="source" required maxlength="200" placeholder="请输入来源"></label><label>摘要<textarea v-model="summary" required maxlength="2000" placeholder="请输入内容"></textarea></label><button :disabled="loading">创建草稿</button></form></FormDialog>
+    <DispatchDialog v-if="dispatching&&selected" :clue-id="selected.clue.id" :version="selected.clue.version" :due-date="selected.clue.suggested_due_date" :important="selected.clue.priority==='IMPORTANT'" @close="dispatching=false" @saved="dispatched"/>
+    <FormDialog v-if="creating" title="新建线索草稿" :busy="loading" :error="error" @close="creating=false"><form v-if="can('intelligence.write')" @submit.prevent="submitCreate"><label>线索编号（可选）<input v-model="referenceNo" maxlength="80" placeholder="留空自动生成"></label><label>重要程度<select v-model="priority"><option value="NORMAL">普通</option><option value="IMPORTANT">重要（禁止下发派出所）</option></select></label><label>建议反馈期限<input v-model="suggestedDueDate" type="date"></label><label>标题<input v-model="title" required maxlength="200"></label><label>来源<input v-model="source" required maxlength="200" placeholder="请输入来源"></label><label>线索内容<textarea v-model="summary" required maxlength="10000" placeholder="请输入内容"></textarea></label><button :disabled="loading">创建草稿</button></form></FormDialog>
   </div>
 </template>

@@ -2,14 +2,12 @@ import { computed, ref, inject, provide, watch, type InjectionKey } from 'vue'
 import { ApiError, createLatestRequests, createRequestScope, isCancelled, RequestCancelled, request } from '../shared/api/client'
 import { newIdempotencyKey } from '../shared/api/idempotency'
 import { createIntelligence } from '../features/intelligence/controller'
-import { createInventory } from '../features/evidence/inventory'
 import { createPersons } from '../features/persons/controller'
+import type {ResourceType} from '../features/geography/types'
 
 export function createWorkspace() {
 type Case = { id: string; number: string; title: string; status: string }
-type Evidence = { id: string; case_id: string; parent_id: string | null; label: string; balance: string; version: number }
 type Page<T> = { items: T[]; total: number; page: number; page_size: number; has_more: boolean }
-type Event = { id: string; kind: string; delta: string; reason: string; created_at: string }
 const token = ref(''), username = ref(''), password = ref(''), organization = ref('')
 const isAdmin = ref(false)
 const permissions=ref<string[]|null>(null),roleName=ref('')
@@ -22,28 +20,42 @@ function stored(key:string) { try { return storage()?.getItem(key) ?? '' } catch
 function save(key:string, value:string) { try { storage()?.setItem(key,value) } catch { /* 页面仍可在本次加载期间使用 */ } }
 function remove(key:string) { try { storage()?.removeItem(key) } catch { /* 浏览器可能禁用存储 */ } }
 const page = ref('工作台'), error = ref(''), notice = ref('')
+const geographyFocus=ref<{type:ResourceType;id:string}|null>(null),placeFocus=ref('')
+function openMap(type:ResourceType,id:string){geographyFocus.value={type,id};page.value='业务地图'}
+function openPlace(id:string){placeFocus.value=id;page.value='重点场所'}
 const activeRuns = ref(new Set<symbol>())
 const loading = computed(() => activeRuns.value.size > 0)
 const requests = createRequestScope(() => token.value || stored(sessionKey), handleUnauthorized)
 const api = requests.api
 const queries = createLatestRequests(api)
 watch(token, () => requests.cancel(), { flush: 'sync' })
-const cases = ref<Case[]>([]), evidence = ref<Evidence[]>([]), events = ref<Event[]>([]), selected = ref('')
-const search = ref(''), caseQuery = ref(''), casePage = ref(1), caseTotal = ref(0), evidencePage = ref(1), evidenceTotal = ref(0), eventPage = ref(1), eventTotal = ref(0), caseNumber = ref(''), caseTitle = ref('')
-const evidenceCase = ref(''), label = ref(''), weight = ref(''), reason = ref('')
-const sampleLabel = ref(''), sampleWeight = ref(''), sampleReason = ref('')
+const cases = ref<Case[]>([])
+const search=ref(''),caseQuery=ref(''),casePage=ref(1),caseTotal=ref(0),caseNumber=ref(''),caseTitle=ref('')
 const pendingKeys = new Map<string, { key: string; path: string; body: string }>()
-const menu=computed(()=>[
-  '工作台',
-  ...([['接警信息','intake.read'],['案件管理','cases.read'],['证物管理','evidence.read'],['情报线索','intelligence.read'],['污水监测','wastewater.read'],['人员档案','persons.read']] as const)
-    .filter(([,permission])=>can(permission)).map(([name])=>name),
-  '智能解析',
-  ...(can('audit.read')?['操作记录']:[]),
-  ...(can('system.users')?['用户管理']:[]),
-  ...(isAdmin.value?['角色管理','权限管理','组织管理','系统日志']:[]),
-])
+const menuGroups=computed(()=>[
+  {label:'综合总览',items:[
+    '工作台',
+    ...(can('dashboard.read')?['数据大屏']:[]),
+    ...(can('geography.read')?['业务地图']:[]),
+  ]},
+  {label:'业务办理',items:(
+    [['接警信息','intake.read'],['情报线索','intelligence.read'],['案件管理','cases.read'],
+     ['人员档案','persons.read'],['重点场所','places.read'],['污水监测','wastewater.read']] as const
+  ).filter(([,permission])=>can(permission)).map(([name])=>name)},
+  {label:'分析研判',items:[
+    ...(can('ai.read')?['智能研判']:[]),
+    ...(['modeling.read','models.read','tactics.read'].some(can)?['分析建模']:[]),
+  ]},
+  {label:'管理审计',items:[
+    ...(isAdmin.value?['组织管理']:[]),
+    ...(can('system.users')?['用户管理']:[]),
+    ...(isAdmin.value?['角色管理','权限管理']:[]),
+    ...(can('audit.read')?['操作记录']:[]),
+    ...(isAdmin.value?['系统日志']:[]),
+  ]},
+].filter(group=>group.items.length))
+const menu=computed(()=>menuGroups.value.flatMap(group=>group.items))
 watch(page, value => { if (token.value && menu.value.includes(value)) save(pageKey,value) })
-const selectedItem = computed(() => evidence.value.find(x => x.id === selected.value))
 async function run(fn: () => Promise<void>) {
   const current = requests.capture(), id = Symbol('operation')
   activeRuns.value.add(id); error.value = ''; notice.value = ''
@@ -57,26 +69,11 @@ async function loadCases(target = casePage.value, query = caseQuery.value) {
   if (!current()) throw new RequestCancelled()
   cases.value = result.items; caseTotal.value = result.total; casePage.value = target; caseQuery.value = query
 }
-async function loadEvidence(target = evidencePage.value) {
-  const current = requests.capture()
-  const result = await queries.latest<Page<Evidence>>('evidence', `/evidence?page=${target}&page_size=20`)
-  if (!current()) throw new RequestCancelled()
-  evidence.value = result.items; evidenceTotal.value = result.total; evidencePage.value = target
-}
-async function loadEvents(id = selected.value, target = eventPage.value) {
-  const current = requests.capture()
-  if (!id) return
-  const result = await queries.latest<Page<Event>>('events', `/evidence/${id}/events?page=${target}&page_size=20`)
-  if (!current()) throw new RequestCancelled()
-  if (selected.value !== id) return
-  events.value = result.items; eventTotal.value = result.total; eventPage.value = target
-}
-async function refresh() { await Promise.all([...(can('cases.read')?[loadCases()]:[]),...(can('evidence.read')?[loadEvidence()]:[])]) }
-async function refreshAfterWrite(message: string, includeEvents = false) {
+async function refresh() { await Promise.all([...(can('cases.read')?[loadCases()]:[])]) }
+async function refreshAfterWrite(message: string) {
   notice.value = message
   try {
     await refresh()
-    if (includeEvents) await loadEvents()
   } catch (e) {
     if (isCancelled(e)) throw e
     error.value = '操作已成功，但列表刷新失败。请重新查询，避免重复提交。'
@@ -99,20 +96,16 @@ async function command(name: string, path: string, data: unknown) {
     throw e
   }
 }
-async function searchCases() { await run(async()=>{await loadCases(1, search.value.trim());evidenceCase.value=''}) }
-async function moveCase(delta: number) { await run(async()=>{await loadCases(casePage.value+delta);evidenceCase.value=''}) }
-async function moveEvidence(delta: number) { await run(async()=>{await loadEvidence(evidencePage.value+delta);selected.value='';events.value=[];eventTotal.value=0;inventory.reset()}) }
-async function moveEvents(delta: number) { await run(async()=>{await loadEvents(selected.value,eventPage.value+delta)}) }
+async function searchCases() { await run(async()=>{await loadCases(1, search.value.trim())}) }
+async function moveCase(delta: number) { await run(async()=>{await loadCases(casePage.value+delta)}) }
 function clearSession() {
   requests.cancel(); queries.cancel(); activeRuns.value.clear(); error.value=''; notice.value=''
   remove(sessionKey); remove(pageKey); remove(legacyPageKey)
   token.value=''; username.value=''; password.value=''; organization.value=''; isAdmin.value=false; page.value='工作台'
-  permissions.value=null;roleName.value=''
-  cases.value=[]; evidence.value=[]; events.value=[]; selected.value=''
+  permissions.value=null;roleName.value='';geographyFocus.value=null;placeFocus.value=''
+  cases.value=[]
   search.value=''; caseQuery.value=''; casePage.value=1; caseTotal.value=0
-  evidencePage.value=1; evidenceTotal.value=0; eventPage.value=1; eventTotal.value=0
-  caseNumber.value=''; caseTitle.value=''; evidenceCase.value=''; label.value=''; weight.value=''; reason.value=''
-  sampleLabel.value=''; sampleWeight.value=''; sampleReason.value=''; pendingKeys.clear(); intelligence.reset(); inventory.reset(); persons.reset()
+  caseNumber.value='';caseTitle.value='';pendingKeys.clear();intelligence.reset();persons.reset()
 }
 function handleUnauthorized(expiredToken: string) {
   if (expiredToken && (token.value === expiredToken || (!token.value && stored(sessionKey) === expiredToken))) {
@@ -128,7 +121,7 @@ async function restoreSession() {
     token.value = savedToken; username.value = result.username; organization.value = result.organization; applyIdentity(result)
     const legacyPage = stored(legacyPageKey)
     const oldPage = stored(pageKey) || (legacyPage === '案件管理' ? '接警信息' : legacyPage === '业务案件' ? '案件管理' : legacyPage)
-    const savedPage = oldPage==='数据导入'?'案件管理':oldPage === '污水毒情监测' ? '污水监测' : ['权限审计', '我的操作记录'].includes(oldPage) ? '操作记录' : oldPage
+    const savedPage = ['数据建模','模型管理','技战法库'].includes(oldPage)?'分析建模':['智能解析','模型服务'].includes(oldPage)?'智能研判':oldPage==='数据导入'?'案件管理':oldPage === '污水毒情监测' ? '污水监测' : ['权限审计', '我的操作记录'].includes(oldPage) ? '操作记录' : oldPage
     page.value = menu.value.includes(savedPage) ? savedPage : '工作台'
     save(pageKey, page.value); remove(legacyPageKey)
     try { await refresh() } catch (e) { if (isCancelled(e)) return; error.value = '登录已恢复，但数据加载失败，请重新查询。' }
@@ -147,15 +140,11 @@ async function logout() {
   }
 }
 async function makeCase() { let saved=false;await run(async()=>{ const current=requests.capture(); await command('case','/cases',{number:caseNumber.value,title:caseTitle.value}); if(!current())return;saved=true; caseNumber.value='';caseTitle.value=''; await refreshAfterWrite('案件草稿已创建') });return saved }
-async function makeEvidence() { let saved=false;await run(async()=>{ const current=requests.capture(); await command('evidence','/evidence',{case_id:evidenceCase.value,label:label.value,weight:weight.value,reason:reason.value}); if(!current())return;saved=true; label.value='';weight.value='';reason.value='';await refreshAfterWrite('证物和初始重量流水已登记') });return saved }
-async function viewEvents(id:string) { await run(async()=>{selected.value=id;eventPage.value=1;events.value=[];inventory.reset();await Promise.all([loadEvents(id,1),inventory.load(id,1)])}) }
-async function makeSample() { await run(async()=>{const current=requests.capture();await command('sample',`/evidence/${selected.value}/samples`,{label:sampleLabel.value,weight:sampleWeight.value,reason:sampleReason.value,source_version:selectedItem.value?.version});if(!current())return;sampleLabel.value='';sampleWeight.value='';sampleReason.value='';await refreshAfterWrite('分样流水已记录', true)}) }
 const intelligence = createIntelligence({api, can, captureSession:requests.capture, username, notice, error, run, command})
-const inventory = createInventory({api,captureSession:requests.capture,selected,selectedItem,notice,error,run,command,refreshEvidence:loadEvidence})
 const persons = createPersons({api,captureSession:requests.capture,notice,error,run,command})
 async function openCase(number:string) {search.value=number;caseQuery.value=number;casePage.value=1;page.value='案件管理';await run(()=>loadCases(1,number))}
 const filteredCases = computed(()=>cases.value)
-return { intelligence, inventory, persons, api, captureSession:requests.capture, command, run, openCase, can, permissions, roleName, refreshCases:()=>run(()=>loadCases()), refreshEvidence:loadEvidence, token, username, password, organization, isAdmin, restoring, restoreError, restoreSession, page, error, notice, loading, cases, evidence, events, selected, search, caseQuery, casePage, caseTotal, evidencePage, evidenceTotal, eventPage, eventTotal, caseNumber, caseTitle, evidenceCase, label, weight, reason, sampleLabel, sampleWeight, sampleReason, menu, selectedItem, filteredCases, login, logout, makeCase, makeEvidence, viewEvents, makeSample, searchCases, moveCase, moveEvidence, moveEvents }
+return {geographyFocus,placeFocus,openMap,openPlace,intelligence,persons,api,captureSession:requests.capture,command,run,openCase,can,permissions,roleName,refreshCases:()=>run(()=>loadCases()),token,username,password,organization,isAdmin,restoring,restoreError,restoreSession,page,error,notice,loading,cases,search,caseQuery,casePage,caseTotal,caseNumber,caseTitle,menu,menuGroups,filteredCases,login,logout,makeCase,searchCases,moveCase}
 }
 
 type Workspace = ReturnType<typeof createWorkspace>

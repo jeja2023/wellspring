@@ -3,19 +3,19 @@ import re
 from sqlalchemy import text
 
 APPEND_ONLY_TABLES = frozenset({
-    "weight_events", "audit_events", "intelligence_events",
-    "evidence_inventory_observations", "case_relation_events",
-    "person_case_candidate_events", "inventory_investigation_events", "custody_events",
-    "wastewater_result_events", "wastewater_samples",
+    "audit_events", "intelligence_events",
+    "case_relation_events",
+    "person_case_candidate_events",
+    "wastewater_result_events", "wastewater_samples", "clue_import_batches", "clue_delivery_events", "analysis_asset_events", "person_events", "place_events", "geo_location_events",
 })
 MUTABLE_TABLES = frozenset({
-    "organizations", "users", "cases", "case_information", "evidence",
+    "organizations", "users", "cases", "case_information",
     "idempotency_records", "clues", "investigation_tasks", "clue_case_links",
     "person_drafts", "case_relations", "person_case_candidates",
-    "inventory_investigations", "case_import_batches", "case_import_rows",
-    "evidence_custody", "custody_handovers",
+    "case_import_batches", "case_import_rows",
+
     "wastewater_sites", "wastewater_results",
-    "roles", "administration_lock",
+    "roles", "administration_lock", "ai_services", "ai_runs", "clue_deliveries", "analysis_assets", "person_records", "person_tasks", "person_transfers", "places", "place_inspections", "place_incidents", "geo_locations",
 })
 RESTRICTED_UPDATE_TABLES = {
     "intake_case_links": ("status", "version", "revoked_by", "revoked_at", "revoke_reason"),

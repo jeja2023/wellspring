@@ -2,7 +2,7 @@ import { computed, ref, type Ref } from 'vue'
 import { createLatestRequests, isCancelled, RequestCancelled, type ApiRequest } from '../../shared/api/client'
 
 type Page<T> = { items: T[]; total: number; has_more: boolean }
-export type Clue = { id: string; title: string; summary: string; source: string; status: string; version: number }
+export type Clue = { reference_no?:string|null;priority?:string;suggested_due_date?:string|null;id: string; title: string; summary: string; source: string; status: string; version: number }
 type Task = { id: string; objective: string; assignee_id: string; due_date: string | null; status: string; result: string | null; version: number }
 type Event = { id: string; action: string; note: string; result: string | null; actor_id: string; assignee_before_id: string | null; assignee_after_id: string | null; created_at: string }
 type Person = { id: string; username: string }
@@ -18,6 +18,7 @@ export function createIntelligence(d: Dependencies) {
   const people=ref<Person[]>([])
   const caseChoices=ref<CaseChoice[]>([]), casePage=ref(1), caseTotal=ref(0), caseSearch=ref(''), caseQuery=ref(''), caseId=ref(''), linkBasis=ref('')
   const caseLinks=ref<CaseLink[]>([]), linkPage=ref(1), linkTotal=ref(0), revokeId=ref(''), revokeReason=ref('')
+  const referenceNo=ref(''),priority=ref('NORMAL'),suggestedDueDate=ref('')
   const title=ref(''), summary=ref(''), source=ref(''), reviewNote=ref(''), objective=ref(''), assignee=ref('')
   const transitionNote=ref(''), result=ref('NO_FINDING'), dueDate=ref('')
   const reassigning=ref(false), reassignee=ref(''), reassignReason=ref('')
@@ -63,10 +64,10 @@ export function createIntelligence(d: Dependencies) {
   }
   async function create() { let saved=false;await d.run(async()=>{
     const current=d.captureSession()
-    await d.command('clue-create','/intelligence/clues',{title:title.value,summary:summary.value,source:source.value})
+    await d.command('clue-create','/intelligence/clues',{title:title.value,summary:summary.value,source:source.value,...(referenceNo.value?{reference_no:referenceNo.value}:{}),...(priority.value!=='NORMAL'?{priority:priority.value}:{}),...(suggestedDueDate.value?{suggested_due_date:suggestedDueDate.value}:{})})
     if (!current()) throw new RequestCancelled()
     saved=true
-    title.value='';summary.value='';source.value='';await refreshAfterWrite('线索草稿已创建')
+    title.value='';summary.value='';source.value='';referenceNo.value='';priority.value='NORMAL';suggestedDueDate.value='';await refreshAfterWrite('线索草稿已创建')
   });return saved }
   async function review() { if(!selected.value)return; await d.run(async()=>{
     const c=selected.value!.clue
@@ -111,6 +112,6 @@ export function createIntelligence(d: Dependencies) {
     if (!current()) throw new RequestCancelled()
     revokeId.value='';revokeReason.value='';await refreshAfterWrite('案件关联已撤销，历史记录保留',clueId)
   }) }
-  function reset() { queries.cancel();mineSequence++;reviewSequence++; clues.value=[]; total.value=0;page.value=1;searchInput.value='';statusInput.value='';appliedSearch.value='';appliedStatus.value='';selected.value=null;eventPage.value=1;people.value=[];title.value='';summary.value='';source.value='';reviewNote.value='';objective.value='';assignee.value='';transitionNote.value='';result.value='NO_FINDING';dueDate.value='';reassigning.value=false;reassignee.value='';reassignReason.value='';caseChoices.value=[];casePage.value=1;caseTotal.value=0;caseSearch.value='';caseQuery.value='';caseId.value='';linkBasis.value='';caseLinks.value=[];linkPage.value=1;linkTotal.value=0;revokeId.value='';revokeReason.value='';myPage.value=1;myTasks.value=[];myTotal.value=0;mineError.value='';mineLoading.value=false;reviewPage.value=1;reviewTasks.value=[];reviewTotal.value=0;reviewLoading.value=false;reviewError.value='' }
-  return {myPage,reviewPage,clues,total,page,searchInput,statusInput,appliedSearch,appliedStatus,searchClues,resetClueSearch,selected,eventPage,people,caseChoices,casePage,caseTotal,caseSearch,caseId,linkBasis,caseLinks,linkPage,linkTotal,revokeId,revokeReason,reassigning,reassignee,reassignReason,reassignTask,searchLinkCases,nextLinkCases,nextLinks,createCaseLink,revokeCaseLink,title,summary,source,reviewNote,objective,assignee,dueDate,transitionNote,result,actorId,myTasks,myTotal,mineLoading,mineError,loadMine,reviewTasks,reviewTotal,reviewLoading,reviewError,loadReviewQueue,activate,show,nextPage,nextEvents,create,review,createTask,transition,reset}
+  function reset() { referenceNo.value='';priority.value='NORMAL';suggestedDueDate.value='';queries.cancel();mineSequence++;reviewSequence++; clues.value=[]; total.value=0;page.value=1;searchInput.value='';statusInput.value='';appliedSearch.value='';appliedStatus.value='';selected.value=null;eventPage.value=1;people.value=[];title.value='';summary.value='';source.value='';reviewNote.value='';objective.value='';assignee.value='';transitionNote.value='';result.value='NO_FINDING';dueDate.value='';reassigning.value=false;reassignee.value='';reassignReason.value='';caseChoices.value=[];casePage.value=1;caseTotal.value=0;caseSearch.value='';caseQuery.value='';caseId.value='';linkBasis.value='';caseLinks.value=[];linkPage.value=1;linkTotal.value=0;revokeId.value='';revokeReason.value='';myPage.value=1;myTasks.value=[];myTotal.value=0;mineError.value='';mineLoading.value=false;reviewPage.value=1;reviewTasks.value=[];reviewTotal.value=0;reviewLoading.value=false;reviewError.value='' }
+  return {referenceNo,priority,suggestedDueDate,myPage,reviewPage,clues,total,page,searchInput,statusInput,appliedSearch,appliedStatus,searchClues,resetClueSearch,selected,eventPage,people,caseChoices,casePage,caseTotal,caseSearch,caseId,linkBasis,caseLinks,linkPage,linkTotal,revokeId,revokeReason,reassigning,reassignee,reassignReason,reassignTask,searchLinkCases,nextLinkCases,nextLinks,createCaseLink,revokeCaseLink,title,summary,source,reviewNote,objective,assignee,dueDate,transitionNote,result,actorId,myTasks,myTotal,mineLoading,mineError,loadMine,reviewTasks,reviewTotal,reviewLoading,reviewError,loadReviewQueue,activate,show,nextPage,nextEvents,create,review,createTask,transition,reset}
 }

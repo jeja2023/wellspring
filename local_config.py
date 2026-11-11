@@ -102,3 +102,15 @@ def database_target(env: dict[str, str]) -> str:
     except ValueError:
         raise ValueError("数据库端口格式无效") from None
     return f"{parsed.scheme}：{parsed.hostname or ''}{port}/{unquote(parsed.path.lstrip('/'))}"
+
+
+def ai_environment(base: dict[str, str], root: Path = ROOT) -> dict[str, str]:
+    """Forward named service settings; explicit process environment takes precedence."""
+    env = base.copy()
+    path = root / '.env'
+    if path.is_file():
+        values = read_env(path)
+        for key in ('WELLSPRING_AI_ALLOWED_HOSTS', 'WELLSPRING_AI_API_KEY', 'WELLSPRING_AI_API_KEY_FILE', 'WELLSPRING_AI_SECRET_DIR', 'WELLSPRING_MAP_TILE_DIR', 'WELLSPRING_MAP_ATTRIBUTION'):
+            if key not in env and key in values:
+                env[key] = values[key]
+    return env

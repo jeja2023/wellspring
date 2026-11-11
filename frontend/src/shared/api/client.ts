@@ -13,11 +13,11 @@ export class RequestCancelled extends Error {
   constructor() { super('请求已取消') }
 }
 export function isCancelled(error: unknown): error is RequestCancelled { return error instanceof RequestCancelled }
-export type RequestOptions = RequestInit & { timeoutMs?: number; onUnauthorized?: (token: string) => void }
+export type RequestOptions = RequestInit & { timeoutMs?: number; onUnauthorized?: (token: string) => void; responseType?: 'json'|'blob' }
 export type ApiRequest = <T = any>(path: string, options?: RequestOptions) => Promise<T>
 
 export async function request<T = any>(path: string, token: string, options: RequestOptions = {}): Promise<T> {
-  const { timeoutMs = 30000, onUnauthorized, signal, ...init } = options
+  const { timeoutMs = 30000, onUnauthorized, signal, responseType = 'json', ...init } = options
   const controller = new AbortController()
   const abort = () => controller.abort()
   signal?.addEventListener('abort', abort, { once: true })
@@ -42,7 +42,7 @@ export async function request<T = any>(path: string, token: string, options: Req
       throw new ApiError('请求超时，操作结果尚未确认；请保留当前输入并重试。', false)
     }
     let data: any
-    try { data = await response.json() }
+    try { data = response.ok && responseType === 'blob' ? await response.blob() : await response.json() }
     catch { if (signal?.aborted) throw new RequestCancelled(); throw new ApiError('服务返回异常，操作结果尚未确认；请保留当前输入并重试。', false, response.status, '', [], response.headers.get('X-Request-ID') || '') }
     if (signal?.aborted) throw new RequestCancelled()
     if (timedOut) throw new ApiError('请求超时，操作结果尚未确认；请保留当前输入并重试。', false)

@@ -1,0 +1,5 @@
+export type AiStatus={available:boolean;message:string;model:string;max_input_chars:number;checked_at:string|null;check_ok:boolean|null;check_message:string}
+export type AiRun={id:string;mode:string;status:'QUEUED'|'RUNNING'|'SUCCEEDED'|'FAILED'|'CANCELLED';model:string;input_chars:number;output_text?:string;error_message:string;error_code:string;truncated:boolean;duration_ms:number|null;prompt_tokens:number|null;completion_tokens:number|null;created_at:string;completed_at:string|null}
+export type AiSettings={version:number;enabled:boolean;base_url:string;model:string;timeout_seconds:number;max_output_tokens:number;token_parameter:'max_tokens'|'max_completion_tokens';checked_at:string|null;check_ok:boolean|null;check_message:string;allowed_hosts:string[];api_key_configured:boolean;api_key_source:'saved'|'environment'|'none'}
+export const modes={summary:'文本摘要',extract:'要素提取',qa:'资料问答',dashboard:'统计解读'}
+export const statuses={QUEUED:'等待执行',RUNNING:'生成中',SUCCEEDED:'已生成草稿',FAILED:'生成失败',CANCELLED:'已取消'}

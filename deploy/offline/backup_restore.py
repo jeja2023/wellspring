@@ -121,14 +121,11 @@ def drill(dump, image, expected_sha, report):
         tables = query("SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename").splitlines()
         counts = {table: int(query('SELECT count(*) FROM public."' + table.replace('"', '""') + '"')) for table in tables}
         revision = query("SELECT version_num FROM alembic_version")
-        mismatch = int(query("SELECT count(*) FROM evidence e WHERE e.balance <> COALESCE((SELECT sum(w.delta) FROM weight_events w WHERE w.evidence_id=e.id),0)"))
-        if mismatch:
-            raise RuntimeError(f"恢复后发现 {mismatch} 条证物余额与重量流水不符")
         result = {"status": "passed", "checked_at": datetime.now(timezone.utc).isoformat(),
                   "dump_sha256": digest, "image_id": metadata["Id"], "server_version": query("SHOW server_version"),
-                  "migration": revision, "table_counts": counts, "weight_ledger_mismatches": mismatch,
+                  "migration": revision, "table_counts": counts,
                   "elapsed_seconds": round(time.monotonic() - started, 2),
-                  "limits": "验证数据库可恢复、表计数及重量账一致；不替代应用权限/业务验收或外部文件恢复"}
+                  "limits": "验证数据库可恢复、表计数及迁移版本；不替代应用权限/业务验收或外部文件恢复"}
         with report.open("x", encoding="utf-8") as stream:
             json.dump(result, stream, ensure_ascii=False, indent=2)
         print(f"隔离恢复演练通过：{report}")

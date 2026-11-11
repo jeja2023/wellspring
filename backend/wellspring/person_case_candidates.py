@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from .db import get_db
 from .models import Case, PersonDraft, PersonCaseCandidate, PersonCaseCandidateEvent, User
 from .security import current_user
+from .person_core import current_org
+from .clue_deliveries import lock_flow
 
 class CandidateCreate(BaseModel):
     case_id: str = Field(min_length=1,max_length=36)
@@ -41,7 +43,9 @@ def create_router(error,audit,reserve,finish,page_result,request_id):
         audit(db,user,"PERSON_CASE_CANDIDATES_VIEW",person_id);db.commit();return result
     @router.post("/{person_id}/case-candidates",status_code=201)
     def create(person_id:str,data:CandidateCreate,key:str | None=Header(None,alias="Idempotency-Key"),user:User=Depends(current_user),db:Session=Depends(get_db)):
+        lock_flow(db,user,'persons.write',error,'persons.read')
         person=person_for(db,user,person_id);case=case_for(db,user,data.case_id);basis=data.basis.strip()
+        if current_org(person)!=user.org_id:raise error(403,'FORBIDDEN','人员责任已移交，原单位候选记录只供历史查看')
         if not basis:raise error(422,"VALIDATION_ERROR","候选依据不能为空")
         body={"person_id":person_id,"case_id":case.id,"person_version":data.person_version,"basis":basis}
         record,replay=reserve(db,user,"PERSON_CASE_CANDIDATE_CREATE",key,body)
@@ -57,9 +61,11 @@ def create_router(error,audit,reserve,finish,page_result,request_id):
         audit(db,user,"PERSON_CASE_CANDIDATE_CREATE",candidate.id);result=render(candidate,case);finish(record,result,201,candidate.id);db.commit();return result
     @router.post("/case-candidates/{candidate_id}/revoke")
     def revoke(candidate_id:str,data:CandidateRevoke,key:str | None=Header(None,alias="Idempotency-Key"),user:User=Depends(current_user),db:Session=Depends(get_db)):
+        lock_flow(db,user,'persons.write',error,'persons.read')
         candidate=db.scalar(select(PersonCaseCandidate).where(PersonCaseCandidate.id==candidate_id,PersonCaseCandidate.org_id==user.org_id))
         if not candidate:raise error(404,"NOT_FOUND","记录不存在或无权访问")
-        person_for(db,user,candidate.person_id);case=case_for(db,user,candidate.case_id);reason=data.reason.strip()
+        person=person_for(db,user,candidate.person_id);case=case_for(db,user,candidate.case_id);reason=data.reason.strip()
+        if current_org(person)!=user.org_id:raise error(403,'FORBIDDEN','人员责任已移交，原单位候选记录只供历史查看')
         if not reason:raise error(422,"VALIDATION_ERROR","撤销原因不能为空")
         record,replay=reserve(db,user,"PERSON_CASE_CANDIDATE_REVOKE",key,{"candidate_id":candidate_id,"version":data.version,"reason":reason})
         if replay:return replay

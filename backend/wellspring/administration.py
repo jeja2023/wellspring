@@ -63,7 +63,7 @@ class RoleFields(Input):
     def permitted(self):
         codes=set(self.permissions)
         if not codes<=CODES: raise ValueError("包含未注册权限")
-        reserved={"system.roles","system.organizations","system.audit","intake.restore"}
+        reserved={"system.roles","system.organizations","system.audit","system.ai","intake.restore"}
         if codes&reserved: raise ValueError("此类权限仅保留给超级管理员")
         if self.kind=="USER" and any(code.startswith("system.") for code in codes): raise ValueError("普通用户角色不能包含系统管理权限")
         for code in codes:
@@ -84,6 +84,7 @@ class RoleUpdate(RoleFields):
 
 
 class OrganizationFields(Input):
+    unit_type:Literal["OTHER","CITY","BRANCH","STATION"]="OTHER"
     name:str=Field(min_length=1,max_length=120)
     parent_id:str|None=Field(default=None,min_length=1,max_length=36)
     active:bool=True
@@ -106,7 +107,7 @@ def role_json(row):
 
 
 def organization_json(row):
-    return {"id":row.id,"name":row.name,"parent_id":row.parent_id,"active":row.active,"version":row.version}
+    return {"id":row.id,"name":row.name,"parent_id":row.parent_id,"active":row.active,"version":row.version,"unit_type":row.unit_type}
 
 
 def create_router(error,audit,reserve,finish,page_result,request_id):
@@ -166,7 +167,7 @@ def create_router(error,audit,reserve,finish,page_result,request_id):
     def catalog(user:User=Depends(current_user),db:Session=Depends(get_db)):
         require(db,user,"system.users")
         audit(db,user,"PERMISSION_CATALOG_VIEW",user.id);db.commit()
-        return {"items":CATALOG,"super_only":["system.roles","system.organizations","system.audit","intake.restore"]}
+        return {"items":CATALOG,"super_only":["system.roles","system.organizations","system.audit","system.ai","intake.restore"]}
 
     @router.get("/system/options")
     def options(user:User=Depends(current_user),db:Session=Depends(get_db)):
@@ -286,12 +287,28 @@ def create_router(error,audit,reserve,finish,page_result,request_id):
         row=db.get(Organization,identity) if identity else Organization()
         if identity and not row:raise error(404,"NOT_FOUND","组织不存在")
         if identity and row.version!=data.version:raise error(409,"VERSION_CONFLICT","组织已变化，请重新查询")
+        unit_type=data.unit_type if not identity or 'unit_type' in data.model_fields_set else row.unit_type
+        if data.parent_id:
+            parent=db.get(Organization,data.parent_id)
+            ranks={'CITY':0,'BRANCH':1,'STATION':2}
+            if parent and parent.unit_type in ranks and unit_type in ranks and ranks[parent.unit_type]>ranks[unit_type]:
+                raise error(422,'INVALID_ORGANIZATION_LEVEL','上级组织类型不能低于下级组织类型')
+        if identity and (row.parent_id!=data.parent_id or row.unit_type!=unit_type):
+            from .clue_deliveries import descendants
+            from .intelligence_models import ClueDelivery
+            affected=[identity,*[item.id for item in descendants(db,identity)]]
+            if db.scalar(select(ClueDelivery.id).where(ClueDelivery.status!='CLOSED',or_(ClueDelivery.sender_org_id.in_(affected),ClueDelivery.recipient_org_id.in_(affected))).limit(1)):
+                raise error(409,'ORGANIZATION_FLOW_IN_USE','该组织或下级存在未办结线索流转，不能改变层级或组织类型')
         if identity and not data.active:
+            from .models import PersonDraft
+            from .person_models import PersonTransfer
+            if db.scalar(select(PersonDraft.id).where(or_(PersonDraft.responsible_org_id==identity,PersonDraft.responsible_org_id.is_(None)&(PersonDraft.org_id==identity))).limit(1)) or db.scalar(select(PersonTransfer.id).where(PersonTransfer.status=='PENDING',or_(PersonTransfer.source_org_id==identity,PersonTransfer.target_org_id==identity)).limit(1)):
+                raise error(409,'ORGANIZATION_PERSON_IN_USE','请先完成该单位人员责任及待接收移交的处理，再停用组织')
             if db.scalar(select(User.id).where(User.org_id==identity,User.active.is_(True)).limit(1)) or db.scalar(select(Organization.id).where(Organization.parent_id==identity,Organization.active.is_(True)).limit(1)):
                 raise error(409,"ORGANIZATION_IN_USE","请先处理启用中的直属用户和下级组织，再停用组织")
         if identity:row.version+=1
         else:db.add(row)
-        row.name=data.name;row.parent_id=data.parent_id;row.active=data.active;db.flush()
+        row.name=data.name;row.parent_id=data.parent_id;row.active=data.active;row.unit_type=unit_type;db.flush()
         return store(db,user,record,organization_json(row),200 if identity else 201,"ORGANIZATION_SAVE",row.id)
 
     @router.post("/system/organizations",status_code=201)

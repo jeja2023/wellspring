@@ -117,7 +117,11 @@ def test_all_business_routes_map_to_registered_permissions():
     schema=TestClient(app).get('/openapi.json').json()
     for path,operations in schema['paths'].items():
         if path in {'/api/login','/api/ready','/api/health'}:continue
-        for method in operations:assert route_permissions(method.upper(),path)<=CODES,(method,path)
+        # Dynamic analysis-area routes must be checked against every concrete area;
+        # the literal template is deliberately rejected by the runtime mapper.
+        paths=[path.replace('{area}',area) for area in ['modeling','models','tactics']] if '{area}' in path else [path]
+        for concrete in paths:
+            for method in operations:assert route_permissions(method.upper(),concrete)<=CODES,(method,concrete)
 
 
 def test_self_password_change_revokes_all_sessions(context):

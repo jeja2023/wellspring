@@ -72,7 +72,4 @@ def create_router(error,audit,page_result,request_id):
         audit(db,user,"AUDIT_SELF_VIEW",user.id);db.commit()
         return page_result(items,page,page_size,total,request_id(request))
 
-    @router.get("/ai/status")
-    def ai_status(user:User=Depends(current_user)):
-        return {"available":False,"mode":"NOT_CONFIGURED","message":"本地 OCR／模型服务尚未接入，当前不能解析或上传文书。"}
     return router

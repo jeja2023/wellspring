@@ -1,41 +1,14 @@
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
-from pathlib import Path
 import asyncio
-import os
-import subprocess
-import sys
 
 import pytest
 from sqlalchemy import event, select, text
-from sqlalchemy.exc import DBAPIError
 
 from wellspring.main import expected_schema_heads
 from wellspring.models import Audit, CaseInformation, InvestigationTask, Session, User
 from test_workflow import context, auth, headers
 
 
-def test_exact_sqlite_weight_boundary_and_numeric_order(context):
-    client, factory = context
-    actor = auth(client, "alice")
-    case = client.post("/api/cases", headers=headers(actor), json={"number": "EXACT", "title": "test"}).json()
-    maximum = "99999999999999.999999"
-    items = []
-    for weight in (maximum, "2", "10"):
-        response = client.post("/api/evidence", headers=headers(actor), json={"case_id": case["id"], "label": weight, "weight": weight, "reason": "test"})
-        assert response.status_code == 201
-        items.append(response.json())
-    page = client.get("/api/evidence?sort=balance&order=asc", headers=actor).json()
-    assert [Decimal(row["balance"]) for row in page["items"]] == [Decimal(2), Decimal(10), Decimal(maximum)]
-    response = client.post(f"/api/evidence/{items[0]['id']}/samples", headers=headers(actor), json={"source_version": 1, "label": "micro", "weight": "0.000001", "reason": "test"})
-    assert response.status_code == 201
-    page = client.get("/api/evidence", headers=actor).json()
-    related = [row for row in page["items"] if row["id"] == items[0]["id"] or row["parent_id"] == items[0]["id"]]
-    assert sum(Decimal(row["balance"]) for row in related) == Decimal(maximum)
-    with factory() as db:
-        assert db.execute(text("SELECT typeof(balance) FROM evidence LIMIT 1")).scalar() == "text"
-        with pytest.raises(DBAPIError):
-            db.execute(text("UPDATE evidence SET balance = '-1.000000' WHERE id = :id"), {"id": items[0]["id"]})
 
 
 def test_created_and_reloaded_timestamps_always_include_utc(context):
@@ -231,24 +204,3 @@ def test_request_body_timeout_stops_slow_clients(monkeypatch):
 
     asyncio.run(RequestBudgetMiddleware(application)({"type": "http", "method": "POST", "headers": []}, receive, send))
     assert messages[0]["status"] == 408
-
-
-def test_sqlite_weight_migration_preserves_values_and_schema(tmp_path):
-    backend = Path(__file__).resolve().parents[1]
-    database = tmp_path / "migration.db"
-    environment = {**os.environ, "DATABASE_URL": "sqlite:///" + database.as_posix()}
-
-    def migrate(*arguments):
-        result = subprocess.run([sys.executable, "-m", "alembic", *arguments], cwd=backend, env=environment, capture_output=True, text=True, encoding="utf-8", timeout=120)
-        assert result.returncode == 0, result.stderr + result.stdout
-
-    migrate("upgrade", "0016")
-    import sqlite3
-    with sqlite3.connect(database) as db:
-        db.execute("INSERT INTO organizations (id,name) VALUES ('org', 'test')")
-        db.execute("INSERT INTO cases VALUES ('case', 'org', 'N', 'test', 'DRAFT', '2020-01-01')")
-        db.execute("INSERT INTO evidence VALUES ('e', 'org', 'case', NULL, 'test', 10.123456, 1, '2020-01-01')")
-    migrate("upgrade", "head")
-    with sqlite3.connect(database) as db:
-        assert db.execute("SELECT balance, typeof(balance) FROM evidence").fetchone() == ("10.123456", "text")
-    migrate("check")

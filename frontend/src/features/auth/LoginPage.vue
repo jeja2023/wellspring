@@ -23,7 +23,7 @@ const { username, password, error, loading, login } = useWorkspace()
         <div class="story-pillars" aria-label="平台业务范围">
           <div><b>人</b><span>人员档案</span></div>
           <div><b>案</b><span>案件协同</span></div>
-          <div><b>物</b><span>证物管理</span></div>
+          <div><b>模</b><span>数据建模</span></div>
           <div><b>情</b><span>情报线索</span></div>
         </div>
       </div>

@@ -1,42 +1,19 @@
 """Database types whose public values are identical on SQLite and PostgreSQL."""
 from datetime import timezone
-from decimal import Decimal, InvalidOperation
-import sqlite3
+from decimal import Decimal
 
-from sqlalchemy import DateTime, Numeric, Text, event
-from sqlalchemy.engine import Engine
+from sqlalchemy import DateTime, Numeric, Text
 from sqlalchemy.types import TypeDecorator
 
-WEIGHT_QUANTUM = Decimal("0.000001")
-MAX_WEIGHT = Decimal("99999999999999.999999")
+DECIMAL_QUANTUM = Decimal("0.000001")
+MAX_DECIMAL = Decimal("99999999999999.999999")
 
 
-def weight_text(value):
+def decimal_text(value):
     amount = Decimal(str(value))
-    if not amount.is_finite() or abs(amount) > MAX_WEIGHT or amount != amount.quantize(WEIGHT_QUANTUM):
-        raise ValueError("Weight must fit an exact decimal(20, 6)")
-    return format(amount.quantize(WEIGHT_QUANTUM), "f")
-
-
-def valid_weight(value):
-    try:
-        weight_text(value)
-        return 1
-    except (InvalidOperation, ValueError, TypeError):
-        return 0
-
-
-@event.listens_for(Engine, "connect")
-def register_sqlite_decimal(connection, _record):
-    if not isinstance(connection, sqlite3.Connection):
-        return
-    connection.create_function("wellspring_decimal_valid", 1, valid_weight, deterministic=True)
-    connection.create_function("wellspring_decimal_compare", 2,
-        lambda a, b: (Decimal(str(a)) > Decimal(str(b))) - (Decimal(str(a)) < Decimal(str(b))), deterministic=True)
-    connection.create_function("wellspring_decimal_subtract", 2,
-        lambda a, b: weight_text(Decimal(str(a)) - Decimal(str(b))), deterministic=True)
-    connection.create_collation("WELLSPRING_DECIMAL",
-        lambda a, b: (Decimal(a) > Decimal(b)) - (Decimal(a) < Decimal(b)))
+    if not amount.is_finite() or abs(amount) > MAX_DECIMAL or amount != amount.quantize(DECIMAL_QUANTUM):
+        raise ValueError("Value must fit an exact decimal(20, 6)")
+    return format(amount.quantize(DECIMAL_QUANTUM), "f")
 
 
 class ExactDecimal(TypeDecorator):
@@ -50,16 +27,11 @@ class ExactDecimal(TypeDecorator):
     def process_bind_param(self, value, dialect):
         if value is None:
             return None
-        exact = weight_text(value)
+        exact = decimal_text(value)
         return exact if dialect.name == "sqlite" else Decimal(exact)
 
     def process_result_value(self, value, dialect):
-        return None if value is None else Decimal(str(value)).quantize(WEIGHT_QUANTUM)
-
-
-# Preserve existing weight imports/migrations while sharing exact storage with
-# other explicitly labelled physical units. This adapter never converts units.
-ExactWeight = ExactDecimal
+        return None if value is None else Decimal(str(value)).quantize(DECIMAL_QUANTUM)
 
 
 class UTCDateTime(TypeDecorator):

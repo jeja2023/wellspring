@@ -7,7 +7,22 @@ before any schema changes so an operator can investigate the original database.
 from decimal import Decimal
 from alembic import op
 import sqlalchemy as sa
-from wellspring.types import weight_text
+# Self-contained historical conversion; no dependency on removed runtime weight code.
+def weight_text(value):
+    amount=Decimal(str(value));quantum=Decimal('0.000001')
+    if not amount.is_finite() or abs(amount)>Decimal('99999999999999.999999') or amount!=amount.quantize(quantum):
+        raise ValueError('Invalid historical weight')
+    return format(amount.quantize(quantum),'f')
+
+
+def register_historical_functions(connection):
+    raw=connection.connection.driver_connection if hasattr(connection,"connection") else connection
+    def valid(value):
+        try:weight_text(value);return 1
+        except (ArithmeticError,ValueError,TypeError):return 0
+    raw.create_function('wellspring_decimal_valid',1,valid,deterministic=True)
+    raw.create_function('wellspring_decimal_compare',2,lambda a,b:(Decimal(str(a))>Decimal(str(b)))-(Decimal(str(a))<Decimal(str(b))),deterministic=True)
+
 
 revision = "0017"
 down_revision = "0016"
@@ -30,6 +45,7 @@ def upgrade():
     connection = op.get_bind()
     if connection.dialect.name != "sqlite":
         return
+    register_historical_functions(connection)
     snapshots = {}
     for table, columns in TABLES.items():
         snapshots[table] = []

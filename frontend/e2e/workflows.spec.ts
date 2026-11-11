@@ -9,10 +9,9 @@ async function login(page: Page, username = 'alice') {
   await expect(page.getByRole('navigation',{name:'主导航'})).toBeVisible()
 }
 
-test('案件创建、关系管理、证物分样与组织隔离', async ({ page }) => {
+test('案件创建、关系管理、新导航与组织隔离', async ({ page }) => {
   const stamp = Date.now().toString()
   const number = `E2E-${stamp}`
-  const label = `虚构证物-${stamp}`
   await login(page)
   await page.getByRole('button', { name: '案件管理', exact: true }).click()
   await page.getByRole('button', { name: '新建案件', exact: true }).click()
@@ -24,27 +23,16 @@ test('案件创建、关系管理、证物分样与组织隔离', async ({ page 
   await row.getByRole('button', { name: '案件关系', exact: true }).click()
   await expect(page.getByRole('heading', { name: `${number} · 案件关系`, exact: true })).toBeVisible()
   await page.getByRole('button', { name: '关闭关系', exact: true }).click()
-  await page.getByRole('button', { name: '证物管理', exact: true }).click()
-  await page.getByRole('button', { name: '登记证物', exact: true }).click()
-  await page.getByRole('combobox', { name: '关联案件', exact: true }).selectOption({ label: `${number} · 浏览器合成案件` })
-  await page.getByLabel('证物名称', { exact: true }).fill(label)
-  await page.getByLabel('初始重量（克）', { exact: true }).fill('100.000001')
-  await page.getByLabel('登记依据', { exact: true }).fill('浏览器合成测试')
-  await page.getByRole('dialog', { name: '登记原始证物', exact: true }).getByRole('button', { name: '登记证物', exact: true }).click()
-  await page.getByRole('row').filter({ hasText: label }).getByRole('button', { name: '查看流水' }).click()
-  await expect(page.getByRole('heading', { name: `${label} · 重量流水`, exact: true })).toBeVisible()
-  await page.getByLabel('检材名称', { exact: true }).fill(`微量-${stamp}`)
-  await page.getByLabel('重量（克）', { exact: true }).fill('0.000001')
-  await page.getByLabel('操作依据', { exact: true }).fill('合成微量分样')
-  await page.getByRole('button', { name: '确认分样', exact: true }).click()
-  await expect(page.getByRole('row').filter({ hasText: label })).toContainText('100.000000')
+  await expect(page.getByRole('navigation',{name:'主导航'}).getByRole('button',{name:'证物管理',exact:true})).toHaveCount(0)
+  await page.getByRole('button',{name:'分析建模',exact:true}).click()
+  await expect(page.getByRole('heading',{level:1,name:'分析建模',exact:true})).toBeVisible()
   await page.getByRole('button', { name: '退出', exact: true }).click()
   await expect(page.getByLabel('账号', { exact: true })).toBeVisible()
   await page.getByLabel('账号', { exact: true }).fill('outsider')
   await page.getByLabel('密码', { exact: true }).fill('synthetic-test-password')
   await page.getByRole('button', { name: '登录系统' }).click()
-  await page.getByRole('button', { name: '证物管理', exact: true }).click()
-  await expect(page.getByRole('row').filter({ hasText: label })).toHaveCount(0)
+  await page.getByRole('button',{name:'案件管理',exact:true}).click()
+  await expect(page.getByRole('row').filter({hasText:number})).toHaveCount(0)
 })
 
 test('Excel 导入、字段修改、筛选与导出保留前导零', async ({ page }) => {

@@ -18,7 +18,7 @@ test('全部业务表格序号、完整边框及分页样式统一',async({page}
  })
  await nav.getByRole('button',{name:'案件管理',exact:true}).click()
  let checked=0
- for(const name of ['工作台','接警信息','案件管理','证物管理','情报线索','人员档案','操作记录','用户管理','角色管理','组织管理','系统日志']){
+ for(const name of ['工作台','接警信息','案件管理','分析建模','情报线索','人员档案','操作记录','用户管理','角色管理','组织管理','系统日志']){
   await nav.getByRole('button',{name,exact:true}).click()
   const tables=page.locator('.content table:visible')
   await expect.poll(()=>tables.count()).toBeGreaterThan(0)
@@ -41,7 +41,7 @@ test('全部业务表格序号、完整边框及分页样式统一',async({page}
   await expect(page.locator('table thead th').first()).toHaveText('序号');checked++
  }
  await page.screenshot({path:testInfo.outputPath('uniform-table-pagination.png'),fullPage:true})
- expect(checked).toBeGreaterThanOrEqual(14)
+ expect(checked).toBeGreaterThanOrEqual(12)
  await page.setViewportSize({width:768,height:900})
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
 })
