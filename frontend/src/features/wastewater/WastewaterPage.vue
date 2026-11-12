@@ -18,7 +18,7 @@ type Point = { result_id:string; sample_code:string; sampled_at:string; detectio
 type TrendResult = { site_name:string; unit:string; points:Point[]; sample_count:number; quantified_count:number; basis:string }
 type Event = { id:string; actor:string; action:string; note:string; created_at:string; snapshot:ResultFields }
 type Page<T> = { items:T[]; page:number; total:number; current_user_id?:string }
-const { api, command, captureSession,takeWorkbenchFocus,quickCreate } = useWorkspace()
+const { api, command, captureSession,takeWorkbenchFocus } = useWorkspace()
 const queries = createLatestRequests(api)
 let mounted = true
 onBeforeUnmount(() => { mounted = false; queries.dispose() })
@@ -101,7 +101,7 @@ const plot=computed(()=>{
   if(group.length)groups.push(group.join(' '))
   return {maximum,groups,dots:numeric.map(p=>({id:p.result_id,x:60+(Date.parse(p.sampled_at)-min)/span*800,y:220-Number(p.concentration)/maximum*180,label:`${p.sample_code}：${p.concentration} ng/L`}))}
 })
-onMounted(()=>{const focus=takeWorkbenchFocus('wastewater');if(focus){tab.value='results';keyword.value=focus.keyword||''}if(quickCreate.value==='sample'){quickCreate.value='';tab.value='samples';editor.value='samples'}void run(async()=>{await Promise.all([load(tab.value as Area,1,keyword.value),choices()])})})
+onMounted(()=>{const focus=takeWorkbenchFocus('wastewater');if(focus){tab.value='results';keyword.value=focus.keyword||''}void run(async()=>{await Promise.all([load(tab.value as Area,1,keyword.value),choices()])})})
 </script>
 
 <template>

@@ -10,8 +10,8 @@ import ImportPage from '../imports/ImportPage.vue'
 const importing=ref(false)
 const selectedCase=ref<{id:string;number:string;title:string} | null>(null)
 const sourceCase=ref<{id:string;number:string;title:string} | null>(null)
-const { can, refreshCases, searchCases, search, loading, filteredCases, casePage, caseTotal, moveCase, makeCase, caseNumber, caseTitle,quickCreate } = useWorkspace()
-onMounted(() => { if(quickCreate.value==='case'){quickCreate.value='';creating.value=true}void refreshCases() })
+const { can, refreshCases, searchCases, search, loading, filteredCases, casePage, caseTotal, moveCase, makeCase, caseNumber, caseTitle } = useWorkspace()
+onMounted(() => { void refreshCases() })
 const {error}=useWorkspace()
 const creating=ref(false)
 async function submitCreate(){if(await makeCase())creating.value=false}

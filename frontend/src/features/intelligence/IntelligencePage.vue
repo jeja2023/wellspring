@@ -9,14 +9,14 @@ import './intelligence.css'
 const {can}=useWorkspace()
 import { onMounted,ref } from 'vue'
 import { useWorkspace } from '../../app/workspace'
-const { intelligence: state, loading,takeWorkbenchFocus,quickCreate } = useWorkspace()
+const { intelligence: state, loading,takeWorkbenchFocus } = useWorkspace()
 const {referenceNo,priority,suggestedDueDate,clues,total,page,searchInput,statusInput,appliedSearch,appliedStatus,searchClues,resetClueSearch,selected,eventPage,people,caseChoices,casePage,caseTotal,caseSearch,caseId,linkBasis,caseLinks,linkPage,linkTotal,revokeId,revokeReason,reassigning,reassignee,reassignReason,reassignTask,searchLinkCases,nextLinkCases,nextLinks,createCaseLink,revokeCaseLink,title,summary,source,reviewNote,objective,assignee,dueDate,transitionNote,result,actorId,activate,show,nextPage,nextEvents,create,review,createTask,transition} = state
 const clueStatus: Record<string,string> = { DRAFT:'待核验', REVIEWED:'已核验 / 可下发' }
 const taskStatus: Record<string,string> = { OPEN:'待办理', PENDING_REVIEW:'待复核', RETURNED:'已退回', CLOSED:'已关闭' }
 const actions: Record<string,string> = {CREATED:'登记线索', REVIEWED:'人工核验', TASK_CREATED:'创建工单', CASE_LINKED:'关联案件', CASE_LINK_REVOKED:'撤销案件关联', REASSIGN:'重新分派', SUBMIT:'提交核查', RETURN:'退回复核', CLOSE:'复核关闭'}
 const results: Record<string,string> = {VERIFIED:'已核实',NO_FINDING:'未发现',INSUFFICIENT:'信息不足',DUPLICATE:'重复线索',TRANSFER:'转其他单位',CONTINUE:'待继续核查'}
 const name = (id:string) => people.value.find(p=>p.id===id)?.username ?? '本组织用户'
-onMounted(async()=>{const focus=takeWorkbenchFocus('intelligence');if(quickCreate.value==='clue'){quickCreate.value='';creating.value=true}if(focus?.kind==='delivery'){tab.value=focus.tab==='sent'?'sent':'received';deliveryFocus.value=focus.id}await activate();if(focus?.kind==='investigation')await show(focus.resource_id)})
+onMounted(async()=>{const focus=takeWorkbenchFocus('intelligence');if(focus?.kind==='delivery'){tab.value=focus.tab==='sent'?'sent':'received';deliveryFocus.value=focus.id}await activate();if(focus?.kind==='investigation')await show(focus.resource_id)})
 const {error}=useWorkspace()
 const creating=ref(false),dispatching=ref(false),tab=ref<'clues'|'received'|'sent'|'imports'>('clues'),deliveryFocus=ref('')
 async function dispatched(){dispatching.value=false;if(selected.value)await show(selected.value.clue.id)}

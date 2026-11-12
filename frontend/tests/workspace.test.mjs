@@ -15,14 +15,12 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const ok = data => new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } })
 
-test('工作台定位按模块权限传递并在取用或退出后清理，快捷办理不绕过写权限',async()=>{
+test('工作台定位按模块权限传递并在取用或退出后清理',async()=>{
  const state=createWorkspace();state.permissions.value=['persons.read','persons.write','places.read']
  const focus={module:'persons',kind:'person-task',id:'task',resource_id:'person',tab:'TASKS',keyword:null}
  state.openWorkbenchTask(focus);assert.equal(state.page.value,'人员档案');assert.equal(state.takeWorkbenchFocus('places'),null)
  assert.deepEqual(state.takeWorkbenchFocus('persons'),focus);assert.equal(state.workbenchFocus.value,null)
- state.startWork('place');assert.equal(state.quickCreate.value,'')
- state.startWork('person');assert.equal(state.quickCreate.value,'person')
- state.openWorkbenchTask(focus);await state.logout();assert.equal(state.workbenchFocus.value,null);assert.equal(state.quickCreate.value,'')
+ state.openWorkbenchTask(focus);await state.logout();assert.equal(state.workbenchFocus.value,null)
 })
 
 test('业务地图和重点场所遵循独立授权并在退出清理定位上下文',async()=>{

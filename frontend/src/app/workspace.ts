@@ -21,18 +21,14 @@ function stored(key:string) { try { return storage()?.getItem(key) ?? '' } catch
 function save(key:string, value:string) { try { storage()?.setItem(key,value) } catch { /* 页面仍可在本次加载期间使用 */ } }
 function remove(key:string) { try { storage()?.removeItem(key) } catch { /* 浏览器可能禁用存储 */ } }
 const page = ref('工作台'), error = ref(''), notice = ref('')
-const workbenchFocus=ref<WorkFocus|null>(null),quickCreate=ref('')
+const workbenchFocus=ref<WorkFocus|null>(null)
 function takeWorkbenchFocus(module:WorkModule){const value=workbenchFocus.value;if(value?.module!==module)return null;workbenchFocus.value=null;return value}
 function openWorkbenchTask(item:WorkFocus){
   if(!can(item.module+'.read'))return
-  workbenchFocus.value={module:item.module,kind:item.kind,id:item.id,resource_id:item.resource_id,tab:item.tab,keyword:item.keyword};quickCreate.value=''
+  workbenchFocus.value={module:item.module,kind:item.kind,id:item.id,resource_id:item.resource_id,tab:item.tab,keyword:item.keyword}
   page.value={intelligence:'情报线索',persons:'人员档案',places:'重点场所',wastewater:'污水监测'}[item.module]
 }
-function startWork(action:string){
-  const targets:Record<string,[string,string]>={case:['案件管理','cases'],clue:['情报线索','intelligence'],person:['人员档案','persons'],place:['重点场所','places'],sample:['污水监测','wastewater']}
-  const target=targets[action];if(!target||!can(target[1]+'.read')||!can(target[1]+'.write'))return
-  workbenchFocus.value=null;quickCreate.value=action;page.value=target[0]
-}
+
 const geographyFocus=ref<{type:ResourceType;id:string}|null>(null),placeFocus=ref('')
 function openMap(type:ResourceType,id:string){geographyFocus.value={type,id};page.value='业务地图'}
 function openPlace(id:string){placeFocus.value=id;page.value='重点场所'}
@@ -116,7 +112,7 @@ function clearSession() {
   remove(sessionKey); remove(pageKey); remove(legacyPageKey)
   token.value=''; username.value=''; password.value=''; organization.value=''; isAdmin.value=false; page.value='工作台'
   permissions.value=null;roleName.value='';geographyFocus.value=null;placeFocus.value=''
-  workbenchFocus.value=null;quickCreate.value=''
+  workbenchFocus.value=null
   cases.value=[]
   search.value=''; caseQuery.value=''; casePage.value=1; caseTotal.value=0
   caseNumber.value='';caseTitle.value='';pendingKeys.clear();intelligence.reset();persons.reset()
@@ -157,7 +153,7 @@ const intelligence = createIntelligence({api, can, captureSession:requests.captu
 const persons = createPersons({api,captureSession:requests.capture,notice,error,run,command})
 async function openCase(number:string) {search.value=number;caseQuery.value=number;casePage.value=1;page.value='案件管理';await run(()=>loadCases(1,number))}
 const filteredCases = computed(()=>cases.value)
-return {workbenchFocus,quickCreate,takeWorkbenchFocus,openWorkbenchTask,startWork,geographyFocus,placeFocus,openMap,openPlace,intelligence,persons,api,captureSession:requests.capture,command,run,openCase,can,permissions,roleName,refreshCases:()=>run(()=>loadCases()),token,username,password,organization,isAdmin,restoring,restoreError,restoreSession,page,error,notice,loading,cases,search,caseQuery,casePage,caseTotal,caseNumber,caseTitle,menu,menuGroups,filteredCases,login,logout,makeCase,searchCases,moveCase}
+return {workbenchFocus,takeWorkbenchFocus,openWorkbenchTask,geographyFocus,placeFocus,openMap,openPlace,intelligence,persons,api,captureSession:requests.capture,command,run,openCase,can,permissions,roleName,refreshCases:()=>run(()=>loadCases()),token,username,password,organization,isAdmin,restoring,restoreError,restoreSession,page,error,notice,loading,cases,search,caseQuery,casePage,caseTotal,caseNumber,caseTitle,menu,menuGroups,filteredCases,login,logout,makeCase,searchCases,moveCase}
 }
 
 type Workspace = ReturnType<typeof createWorkspace>

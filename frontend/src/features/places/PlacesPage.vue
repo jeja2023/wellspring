@@ -7,7 +7,7 @@ import PlaceDetail from './PlaceDetail.vue'
 import PlaceEditor from './PlaceEditor.vue'
 import {kinds,today,type Page,type Place} from './types'
 import '../geography/geography.css'
-const {api,can,openMap,placeFocus,page:workspacePage,takeWorkbenchFocus,quickCreate}=useWorkspace(),queries=createLatestRequests(api)
+const {api,can,openMap,placeFocus,page:workspacePage,takeWorkbenchFocus}=useWorkspace(),queries=createLatestRequests(api)
 const listing=ref<Page<Place>>({items:[],page:1,total:0}),busy=ref(false),error=ref(''),creating=ref(false),selected=ref(''),focusTab=ref<'inspections'|'incidents'>('inspections'),focusRecord=ref('')
 const form=reactive({keyword:'',kind:'',active:''}),applied=ref({keyword:'',kind:null as string|null,active:null as boolean|null})
 let alive=true;onBeforeUnmount(()=>{alive=false;queries.dispose()})
@@ -15,7 +15,7 @@ async function load(target=1,filter=applied.value){busy.value=true;error.value='
 function search(){void load(1,{keyword:form.keyword.trim(),kind:form.kind||null,active:form.active===''?null:form.active==='yes'})}
 function saved(row:Place){creating.value=false;selected.value=row.id}
 function back(){selected.value='';void load()}
-onMounted(()=>{const focus=takeWorkbenchFocus('places');if(focus){selected.value=focus.resource_id;focusTab.value=focus.tab==='incidents'?'incidents':'inspections';focusRecord.value=focus.id}else if(placeFocus.value){selected.value=placeFocus.value;placeFocus.value=''}else void load();if(quickCreate.value==='place'){quickCreate.value='';creating.value=true}})
+onMounted(()=>{const focus=takeWorkbenchFocus('places');if(focus){selected.value=focus.resource_id;focusTab.value=focus.tab==='incidents'?'incidents':'inspections';focusRecord.value=focus.id}else if(placeFocus.value){selected.value=placeFocus.value;placeFocus.value=''}else void load()})
 </script>
 <template><div class="places-page"><PlaceDetail v-if="selected" :key="selected" :place-id="selected" :initial-tab="focusTab" :focus-id="focusRecord" @close="back"/><template v-else>
   <p v-if="error" role="alert" class="error">{{error}}</p><section class="card map-intro"><div><strong>场所台账与处置</strong><p class="muted">登记管理依据，记录巡查整改与具体事件，跟踪核验和处置反馈。</p></div><div class="map-form-actions"><button v-if="can('geography.read')" class="secondary" @click="workspacePage='业务地图'">地图查看</button><button v-if="can('places.write')" :disabled="busy" @click="creating=true">新增场所</button></div></section>
