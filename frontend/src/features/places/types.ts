@@ -6,7 +6,7 @@ export type History={id:string;action:string;note:string;created_at:string;snaps
 export type Page<T>={items:T[];page:number;total:number}
 export const kinds:Record<string,string>={APARTMENT:'公寓',BAR:'酒吧',ENTERTAINMENT:'娱乐场所',STREET:'街区',OTHER:'其他场所'}
 export const statuses:Record<string,string>={DRAFT:'待核验',RETURNED:'退回补充',OPEN:'待处置',SUBMITTED:'待复核办结',CLOSED:'已办结',DONE:'已完成'}
-export const actions:Record<string,string>={CREATED:'建立场所',UPDATED:'更正场所资料',STATE_CHANGED:'启停调整',INSPECTED:'登记巡查',INSPECTION_COMPLETED:'复查整改',INCIDENT_CREATED:'登记事件',INCIDENT_UPDATED:'补充事件',INCIDENT_CONFIRM:'核验确认',INCIDENT_RETURN:'退回补充',INCIDENT_SUBMIT:'提交处置反馈',INCIDENT_CLOSE:'复核办结',INCIDENT_REOPEN:'重新办理',INCIDENT_CLUE_CREATED:'转录线索草稿'}
+export const actions:Record<string,string>={CREATED:'建立场所',UPDATED:'更正场所资料',STATE_CHANGED:'启停调整',INSPECTED:'登记巡查',INSPECTION_COMPLETED:'复查整改',INCIDENT_CREATED:'登记事件',INCIDENT_UPDATED:'补充事件',INCIDENT_CONFIRM:'核验确认',INCIDENT_RETURN:'退回补充',INCIDENT_SUBMIT:'提交处置反馈',INCIDENT_CLOSE:'复核办结',INCIDENT_REOPEN:'重新办理',INCIDENT_CLUE_CREATED:'转录情报线索'}
 export function today(){const date=new Date();return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`}
 
 export type ActionSpec={title:string;path:string;version:number;extra?:Record<string,unknown>}

@@ -23,8 +23,9 @@ def create_router(error,audit,reserve,finish,page_result,request_id):
         rows=db.scalars(select(Organization).where(Organization.active.is_(True),Organization.id!=user.org_id).order_by(Organization.name).limit(1000)).all()
         return {'organizations':[{'id':row.id,'name':row.name} for row in rows],'current_org_id':user.org_id}
     @router.get('/transfers/inbox')
-    def inbox(request:Request,page:int=Query(1,ge=1,le=100000),user:User=Depends(current_user),db:Session=Depends(get_db)):
+    def inbox(request:Request,page:int=Query(1,ge=1,le=100000),focus_id:str|None=Query(None,max_length=36),user:User=Depends(current_user),db:Session=Depends(get_db)):
         filters=[or_(PersonTransfer.source_org_id==user.org_id,PersonTransfer.target_org_id==user.org_id)]
+        if focus_id:filters.append(PersonTransfer.id==focus_id)
         total=db.scalar(select(func.count()).select_from(PersonTransfer).where(*filters)) or 0
         rows=db.scalars(select(PersonTransfer).where(*filters).order_by(PersonTransfer.created_at.desc(),PersonTransfer.id.desc()).offset((page-1)*20).limit(20)).all()
         result=page_result([render(db,row) for row in rows],page,20,total,request_id(request));audit(db,user,'PERSON_TRANSFER_INBOX',user.org_id);db.commit();return result

@@ -224,8 +224,8 @@ def create_router(error, audit, reserve, finish, page_result, request_id):
         row = Result(org_id=user.org_id, created_by=user.id, **data.model_dump()); db.add(row)
         try: db.flush()
         except IntegrityError:
-            db.rollback(); raise error(409, "DUPLICATE_RESULT", "该样本、指标、实验室和报告编号已有记录，请修改原草稿或核对报告版本")
-        result = result_json(row); event(db, user, row, "CREATE", "录入检测结果草稿")
+            db.rollback(); raise error(409, "DUPLICATE_RESULT", "该样本、指标、实验室和报告编号已有记录，请修改原待复核记录或核对报告版本")
+        result = result_json(row); event(db, user, row, "CREATE", "录入待复核检测结果")
         audit(db, user, "WASTEWATER_RESULT_CREATE", row.id); finish(record, result, 201, row.id); db.commit(); return result
 
     @router.post("/results/{identity}/update")

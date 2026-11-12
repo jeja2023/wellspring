@@ -18,7 +18,7 @@ CATALOG += [{"code":code,"name":name,"group":group} for code,name,group in [
     ("dashboard.read","数据大屏查询","数据大屏"),("ai.read","智能研判查询","智能研判"),
     ("intelligence.import","导入情报线索","情报线索"),("intelligence.dispatch","下发情报线索","情报线索"),
     ("intelligence.dispose","处置及反馈线索","情报线索"),("intelligence.review","复核办结线索","情报线索"),
-    ("ai.generate","使用大模型生成草稿","智能研判"),("system.ai","配置模型服务（超级管理员）","系统管理")]]
+    ("ai.generate","使用大模型生成研判结果","智能研判"),("system.ai","配置模型服务（超级管理员）","系统管理")]]
 CATALOG += [{"code":code,"name":name,"group":group} for code,name,group in [
     ("places.read","查询场所、巡查及事件","重点场所"),("places.write","维护场所、巡查及事件","重点场所"),
     ("places.review","核验场所事件及复核办结","重点场所"),
@@ -49,6 +49,7 @@ def route_permissions(method,path):
     if path.startswith("/api/admin/"): return {"system.audit"} if path.endswith("audit/search") else set()
     if path=="/api/audit/mine": return {"audit.read"}
     if path=="/api/dashboard/overview": return {"dashboard.read"}
+    if method == 'GET' and path == '/api/workbench/tasks': return set()  # Authenticated; each source applies its own read/write permissions.
     if path.startswith("/api/ai/"):
         if path=="/api/ai/status" or (path=="/api/ai/runs" and method=="GET") or path.startswith("/api/ai/runs/"):
             return {"ai.read"}

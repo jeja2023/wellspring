@@ -12,6 +12,6 @@ onBeforeUnmount(()=>{dialog.value?.close();document.body.style.overflow=previous
  <Teleport to="body"><dialog ref="dialog" class="form-dialog" :class="{'form-dialog-wide':wide}" :aria-label="title" :aria-busy="busy" @cancel="busy&&$event.preventDefault()" @close="emit('close')">
   <div class="form-dialog-heading"><h2>{{title}}</h2><button type="button" class="link" :disabled="busy" :aria-label="'关闭'+title" @click="close">关闭</button></div>
   <div class="form-dialog-body"><p v-if="error" class="error" role="alert">{{error}}</p><fieldset :disabled="busy"><slot /></fieldset></div>
-  <div class="form-dialog-footer"><button type="button" class="secondary" :disabled="busy" @click="close">取消</button><span v-if="busy" class="muted" role="status">{{busyMessage}}</span></div>
+  <div v-if="busy" class="form-dialog-footer"><span class="muted" role="status">{{busyMessage}}</span></div>
  </dialog></Teleport>
 </template>

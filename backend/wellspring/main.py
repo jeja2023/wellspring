@@ -25,9 +25,10 @@ from .db import get_db
 from .models import Audit, Case, IdempotencyRecord, Organization, Session, User
 from .http_limits import RequestBudgetMiddleware, login_limiter
 from .access_policy import identity_json
+from .audit_actions import action_condition, action_name
 from .security import DUMMY_PASSWORD_HASH, PASSWORD_MAX_LENGTH, USERNAME_MAX_LENGTH, current_admin, current_user, new_token, token_hash, verify_password
 
-app = FastAPI(title="清源开发验证 API", version="0.0.6")
+app = FastAPI(title="清源开发验证 API", version="0.0.7")
 app.add_middleware(RequestBudgetMiddleware)
 
 class Login(BaseModel):
@@ -233,7 +234,7 @@ class SystemAuditSearch(BaseModel):
     username: str = Field(default="", max_length=80)
     action: str = Field(default="", max_length=80)
     page: int = Field(default=1, ge=1, le=100000)
-    page_size: int = Field(default=20, ge=1, le=100)
+    page_size: int = Field(default=15, ge=1, le=100)
 
 
 @app.post("/api/admin/audit/search")
@@ -242,10 +243,10 @@ def search_system_audit(data: SystemAuditSearch, request: Request, user: User = 
     if data.username.strip():
         stmt = stmt.where(User.username.contains(data.username.strip(), autoescape=True))
     if data.action.strip():
-        stmt = stmt.where(Audit.action.contains(data.action.strip(), autoescape=True))
+        stmt = stmt.where(action_condition(Audit.action, data.action))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.execute(stmt.order_by(Audit.created_at.desc(), Audit.id.desc()).offset((data.page - 1) * data.page_size).limit(data.page_size)).all()
-    items = [{"id": event.id, "username": username, "organization": org_name, "action": event.action, "object_id": event.object_id, "created_at": event.created_at} for event, username, org_name in rows]
+    items = [{"id": event.id, "username": username, "organization": org_name, "action": event.action, "action_name": action_name(event.action), "object_id": event.object_id, "created_at": event.created_at} for event, username, org_name in rows]
     audit(db, user, "SYSTEM_AUDIT_SEARCH", user.id)
     db.commit()
     return page_result(items, data.page, data.page_size, total, request_id(request))
@@ -342,6 +343,8 @@ app.include_router(create_administration_router(api_error,audit,reserve_idempote
 
 from .dashboard import create_router as create_dashboard_router
 app.include_router(create_dashboard_router(audit))
+from .workbench import create_router as create_workbench_router
+app.include_router(create_workbench_router(audit))
 from .ai import create_router as create_ai_router
 app.include_router(create_ai_router(api_error,audit,reserve_idempotency,finish_idempotency,page_result,request_id))
 

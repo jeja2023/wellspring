@@ -15,6 +15,16 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const ok = data => new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } })
 
+test('工作台定位按模块权限传递并在取用或退出后清理，快捷办理不绕过写权限',async()=>{
+ const state=createWorkspace();state.permissions.value=['persons.read','persons.write','places.read']
+ const focus={module:'persons',kind:'person-task',id:'task',resource_id:'person',tab:'TASKS',keyword:null}
+ state.openWorkbenchTask(focus);assert.equal(state.page.value,'人员档案');assert.equal(state.takeWorkbenchFocus('places'),null)
+ assert.deepEqual(state.takeWorkbenchFocus('persons'),focus);assert.equal(state.workbenchFocus.value,null)
+ state.startWork('place');assert.equal(state.quickCreate.value,'')
+ state.startWork('person');assert.equal(state.quickCreate.value,'person')
+ state.openWorkbenchTask(focus);await state.logout();assert.equal(state.workbenchFocus.value,null);assert.equal(state.quickCreate.value,'')
+})
+
 test('业务地图和重点场所遵循独立授权并在退出清理定位上下文',async()=>{
  const state=createWorkspace()
  state.permissions.value=['wastewater.read']
@@ -119,14 +129,14 @@ test('响应丢失后通用命令复用幂等键，不允许更换请求内容',
  }finally{globalThis.fetch=original}
 })
 
-test('退出后清理上一个用户的筛选、草稿与结果', async () => {
+test('退出后清理上一个用户的筛选、未提交内容与结果', async () => {
   const original = globalThis.fetch
   try {
     globalThis.fetch = async () => ok({ ok: true })
     const state = createWorkspace()
     state.token.value = 'example'
     state.username.value = 'demo'
-    state.caseNumber.value = '未提交草稿'
+    state.caseNumber.value = '未提交内容'
     state.search.value = '筛选值'
     state.caseTotal.value = 7
     state.page.value = '案件管理'
@@ -271,7 +281,7 @@ test('线索筛选提交后分页使用已应用条件，失败保留结果并�
 
 
 
-test('创建人员只生成未核验草稿并在退出时清理', async () => {
+test('创建人员只生成人员待核验档案并在退出时清理', async () => {
   const original=globalThis.fetch;const calls=[]
   try {
     globalThis.fetch=async (url,options)=>{calls.push({url:String(url),options});if(String(url).includes('/person-drafts/search'))return ok({items:[],total:0,has_more:false});if(options?.method==='POST')return ok({id:'p',verification_status:'UNVERIFIED'});return ok({items:[],total:0,has_more:false})}
@@ -279,7 +289,7 @@ test('创建人员只生成未核验草稿并在退出时清理', async () => {
     await state.persons.create()
     assert.deepEqual(JSON.parse(calls[0].options.body),{name:'虚构姓名',source:'虚构来源'})
     assert.match(state.notice.value,/尚未核验/)
-    state.persons.name.value='草稿';await state.logout();assert.equal(state.persons.name.value,'')
+    state.persons.name.value='合成待核验人员';await state.logout();assert.equal(state.persons.name.value,'')
   } finally {globalThis.fetch=original}
 })
 
@@ -331,7 +341,7 @@ test('旧账号延迟响应在退出并登录新账号后不能回写人员列�
   } finally { globalThis.fetch = oldFetch }
 })
 
-test('迟到的旧写入响应不会清除新会话草稿或发起新会话刷新', async () => {
+test('迟到的旧写入响应不会清除新会话未提交内容或发起新会话刷新', async () => {
   const old = deferred(); const calls = []
   try {
     globalThis.fetch = async (url,options) => {

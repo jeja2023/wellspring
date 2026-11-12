@@ -28,7 +28,7 @@ test('API Key 输入、模型 ID 获取、未保存连接测试及密钥保留�
   await page.getByRole('button',{name:'配置模型服务',exact:true}).click()
   await expect(key).toHaveValue('')
   await expect(page.getByText('已配置（不回显）',{exact:true})).toBeVisible()
-  await dialog.getByRole('button',{name:'取消',exact:true}).click()
+  await dialog.getByRole('button',{name:/^关闭/}).click()
   await nav.getByRole('button',{name:'工作台',exact:true}).click()
   await nav.getByRole('button',{name:'智能研判',exact:true}).click()
   await page.getByRole('button',{name:'配置模型服务',exact:true}).click()

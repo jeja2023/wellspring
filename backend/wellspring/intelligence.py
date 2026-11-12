@@ -156,7 +156,7 @@ def create_router(error, audit, reserve, finish, page_result, request_id):
         if db.scalar(select(Clue.id).where(Clue.org_id==user.org_id,Clue.reference_no==number)):raise error(409,'CLUE_NUMBER_EXISTS','本组织线索编号已存在')
         clue=Clue(org_id=user.org_id,created_by=user.id,status="DRAFT",version=1,reference_no=number,priority=data.priority,suggested_due_date=data.suggested_due_date,**payload)
         db.add(clue); db.flush()
-        event(db,user,clue.id,None,"CREATED",None,"DRAFT","线索草稿已创建")
+        event(db,user,clue.id,None,"CREATED",None,"DRAFT","线索记录已创建")
         audit(db,user,"CLUE_CREATE",clue.id)
         result=clue_json(clue); finish(record,result,201,clue.id); db.commit()
         return result

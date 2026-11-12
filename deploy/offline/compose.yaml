@@ -26,7 +26,7 @@ services:
       retries: 20
     restart: unless-stopped
   migrate:
-    image: ${APP_IMAGE:-wellspring/app:0.0.6}
+    image: ${APP_IMAGE:-wellspring/app:0.0.7}
     pull_policy: never
     profiles: [tools]
     command: ["migrate"]
@@ -39,7 +39,7 @@ services:
       db: { condition: service_healthy }
     restart: "no"
   bootstrap:
-    image: ${APP_IMAGE:-wellspring/app:0.0.6}
+    image: ${APP_IMAGE:-wellspring/app:0.0.7}
     pull_policy: never
     profiles: [tools]
     command: ["bootstrap"]
@@ -52,7 +52,7 @@ services:
       db: { condition: service_healthy }
     restart: "no"
   app:
-    image: ${APP_IMAGE:-wellspring/app:0.0.6}
+    image: ${APP_IMAGE:-wellspring/app:0.0.7}
     pull_policy: never
     environment:
       DB_USER: wellspring_app
@@ -61,6 +61,11 @@ services:
       WELLSPRING_AI_API_KEY: ${AI_API_KEY:-}
       WELLSPRING_MAP_TILE_DIR: ${MAP_TILE_DIR:-}
       WELLSPRING_MAP_ATTRIBUTION: ${MAP_ATTRIBUTION:-本地授权底图}
+      WELLSPRING_MAP_TILE_CRS: ${MAP_TILE_CRS:-WGS84}
+      WELLSPRING_MAP_MIN_ZOOM: ${MAP_MIN_ZOOM:-0}
+      WELLSPRING_MAP_MAX_ZOOM: ${MAP_MAX_ZOOM:-20}
+      WELLSPRING_MAP_CENTER: ${MAP_CENTER:-120.297066,31.576634}
+      WELLSPRING_MAP_INITIAL_ZOOM: ${MAP_INITIAL_ZOOM:-13}
     secrets: [runtime_password]
     volumes:
       - wellspring_ai_secrets:/app/.secrets

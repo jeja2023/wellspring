@@ -28,11 +28,12 @@ def create_router(error,audit,reserve,finish,page_result,request_id):
         if due:db.add(PersonTask(person_id=person.id,record_id=record.id,org_id=record.manager_org_id,task_type=code,title=title,due_on=due,created_by=user.id))
 
     @router.get('/{identity}/records')
-    def records(identity:str,request:Request,kind:str|None=None,page:int=Query(1,ge=1,le=100000),user:User=Depends(current_user),db:Session=Depends(get_db)):
+    def records(identity:str,request:Request,kind:str|None=None,page:int=Query(1,ge=1,le=100000),focus_id:str|None=Query(None,max_length=36),user:User=Depends(current_user),db:Session=Depends(get_db)):
         visible_person(db,user,identity,error)
         if kind and kind not in readable_kinds(db,user):raise error(403,'FORBIDDEN','当前账号没有此类资料查询权限')
         filters=record_filters(db,user,identity)
         if kind:filters.append(PersonRecord.kind==kind)
+        if focus_id:filters.append(PersonRecord.id==focus_id)
         total=db.scalar(select(func.count()).select_from(PersonRecord).where(*filters)) or 0
         rows=db.scalars(select(PersonRecord).where(*filters).order_by(PersonRecord.occurred_on.desc(),PersonRecord.created_at.desc(),PersonRecord.id.desc()).offset((page-1)*20).limit(20)).all()
         result=page_result([record_json(db,row) for row in rows],page,20,total,request_id(request));audit(db,user,'PERSON_RECORDS_VIEW',identity);db.commit();return result
@@ -67,7 +68,7 @@ def create_router(error,audit,reserve,finish,page_result,request_id):
         if replay:return replay
         if data.occurred_on>today():raise error(422,'FUTURE_FACT','事实或决定日期不能晚于今天')
         if data.case_id and not db.scalar(select(Case.id).where(Case.id==data.case_id,Case.org_id==user.org_id)):raise error(404,'NOT_FOUND','关联案件不存在或无权访问')
-        if data.replaces_id!=row.replaces_id:raise error(422,'REPLACEMENT_IMMUTABLE','不能通过修改草稿更换更正链')
+        if data.replaces_id!=row.replaces_id:raise error(422,'REPLACEMENT_IMMUTABLE','不能通过修改登记资料更换更正链')
         before=record_json(db,row);bump(db,person,data.person_version)
         values={name:getattr(data,name) for name in ['record_type','occurred_on','source','document_no','basis','case_id','expected_end_on']}
         values.update(details_json=json.dumps(data.details,ensure_ascii=False),verification_status='PENDING',verified_by=None,verified_at=None,updated_by=user.id,version=PersonRecord.version+1)
@@ -123,9 +124,10 @@ def create_router(error,audit,reserve,finish,page_result,request_id):
         audit(db,user,'PERSON_MEASURE_EXECUTE',row.id);result=record_json(db,row);finish(record,result,200,row.id);db.commit();return result
 
     @router.get('/{identity}/tasks')
-    def tasks(identity:str,request:Request,page:int=Query(1,ge=1,le=100000),user:User=Depends(current_user),db:Session=Depends(get_db)):
+    def tasks(identity:str,request:Request,page:int=Query(1,ge=1,le=100000),focus_id:str|None=Query(None,max_length=36),user:User=Depends(current_user),db:Session=Depends(get_db)):
         visible_person(db,user,identity,error)
         filters=[PersonTask.person_id==identity,PersonTask.org_id==user.org_id]
+        if focus_id:filters.append(PersonTask.id==focus_id)
         total=db.scalar(select(func.count()).select_from(PersonTask).where(*filters)) or 0
         rows=db.scalars(select(PersonTask).where(*filters).order_by(PersonTask.status.desc(),PersonTask.due_on,PersonTask.id).offset((page-1)*20).limit(20)).all()
         result=page_result([{**{name:getattr(row,name) for name in ['id','record_id','task_type','title','due_on','status','result_note','version','completed_at']},'overdue':row.status=='OPEN' and row.due_on<today()} for row in rows],page,20,total,request_id(request));audit(db,user,'PERSON_TASK_VIEW',identity);db.commit();return result

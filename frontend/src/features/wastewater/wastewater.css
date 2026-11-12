@@ -1,9 +1,5 @@
-.wastewater-tabs{flex-wrap:wrap}
-.wastewater-search{display:flex;align-items:end;gap:12px;margin-bottom:20px}
-.wastewater-search label{width:min(420px,100%)}
-.wastewater-search input{margin-bottom:0}
-.wastewater-trend-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end}
+.wastewater-tabs{display:flex;gap:10px;flex-wrap:wrap}
+.wastewater-trend-filters>label{flex:0 1 180px;max-width:100%;min-width:160px}.wastewater-trend-filters>label:first-child{flex-basis:320px}
 .wastewater-trend-filters input,.wastewater-trend-filters select{margin-bottom:0}
 .wastewater-chart{width:100%;overflow:auto;margin:20px 0}
 .wastewater-chart svg{width:100%;min-width:600px;display:block;color:#61778b;font-size:12px}
-@media(max-width:600px){.wastewater-search{flex-wrap:wrap}}

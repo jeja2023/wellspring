@@ -2,7 +2,7 @@
 import csv
 import hashlib
 import io
-from datetime import timezone
+from datetime import date, datetime, time, timedelta, timezone
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from .db import get_db
 from .models import Audit, User
 from .security import current_user
+from .audit_actions import action_condition, action_name
 
 MAX_BYTES=100_000
 MAX_ROWS=1000
@@ -61,14 +62,27 @@ def create_router(error,audit,page_result,request_id):
         return {"sha256":digest,"rows":rows,"total":len(rows),"valid_count":sum(r["valid"] for r in rows),"invalid_count":sum(not r["valid"] for r in rows),"mode":"PREVIEW_ONLY"}
 
     @router.get("/audit/mine")
-    def my_audit(request:Request,page:int=Query(1,ge=1,le=100000),page_size:int=Query(20,ge=1,le=100),user:User=Depends(current_user),db:Session=Depends(get_db)):
+    def my_audit(request:Request,page:int=Query(1,ge=1,le=100000),page_size:int=Query(15,ge=1,le=100),
+                 action:str=Query('',max_length=80),object_id:str=Query('',max_length=36),
+                 start_date:date|None=None,end_date:date|None=None,
+                 user:User=Depends(current_user),db:Session=Depends(get_db)):
+        if start_date and end_date and start_date>end_date:
+            raise error(422,'INVALID_DATE_RANGE','开始日期不能晚于结束日期')
         stmt=select(Audit).where(Audit.actor_id==user.id)
+        if action.strip():stmt=stmt.where(action_condition(Audit.action,action))
+        if object_id.strip():stmt=stmt.where(Audit.object_id.contains(object_id.strip(),autoescape=True))
+        local_zone=timezone(timedelta(hours=8))
+        if start_date:stmt=stmt.where(Audit.created_at>=datetime.combine(start_date,time.min,local_zone).astimezone(timezone.utc))
+        if end_date:
+            try:exclusive_end=datetime.combine(end_date+timedelta(days=1),time.min,local_zone).astimezone(timezone.utc)
+            except OverflowError:raise error(422,'INVALID_DATE_RANGE','结束日期超出支持范围') from None
+            stmt=stmt.where(Audit.created_at<exclusive_end)
         total=db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
         rows=db.scalars(stmt.order_by(Audit.created_at.desc(),Audit.id.desc()).offset((page-1)*page_size).limit(page_size)).all()
         items=[]
         for row in rows:
             when=row.created_at if row.created_at.tzinfo else row.created_at.replace(tzinfo=timezone.utc)
-            items.append({"id":row.id,"action":row.action,"object_id":row.object_id,"created_at":when.isoformat()})
+            items.append({"id":row.id,"action":row.action,"action_name":action_name(row.action),"object_id":row.object_id,"created_at":when.isoformat()})
         audit(db,user,"AUDIT_SELF_VIEW",user.id);db.commit()
         return page_result(items,page,page_size,total,request_id(request))
 

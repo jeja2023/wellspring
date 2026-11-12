@@ -67,7 +67,7 @@ export function createIntelligence(d: Dependencies) {
     await d.command('clue-create','/intelligence/clues',{title:title.value,summary:summary.value,source:source.value,...(referenceNo.value?{reference_no:referenceNo.value}:{}),...(priority.value!=='NORMAL'?{priority:priority.value}:{}),...(suggestedDueDate.value?{suggested_due_date:suggestedDueDate.value}:{})})
     if (!current()) throw new RequestCancelled()
     saved=true
-    title.value='';summary.value='';source.value='';referenceNo.value='';priority.value='NORMAL';suggestedDueDate.value='';await refreshAfterWrite('线索草稿已创建')
+    title.value='';summary.value='';source.value='';referenceNo.value='';priority.value='NORMAL';suggestedDueDate.value='';await refreshAfterWrite('线索记录已创建')
   });return saved }
   async function review() { if(!selected.value)return; await d.run(async()=>{
     const c=selected.value!.clue

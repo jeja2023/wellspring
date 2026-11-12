@@ -5,11 +5,12 @@ import {createLatestRequests,isCancelled} from '../../shared/api/client'
 import {formatTimestamp} from '../../shared/time'
 import Pagination from '../../shared/components/Pagination.vue'
 import DistributionPanel from './DistributionPanel.vue'
+import StatisticsDialog from './StatisticsDialog.vue'
 import {colors,linePath,type Overview} from './screen'
 import './screen.css'
 
-const {api,can,page:workspacePage}=useWorkspace(),requests=createLatestRequests(api)
-const board=ref<HTMLElement|null>(null),data=ref<Overview|null>(null),days=ref<7|30|90>(30)
+const {api,can}=useWorkspace(),requests=createLatestRequests(api)
+const board=ref<HTMLElement|null>(null),data=ref<Overview|null>(null),days=ref<7|30|90>(30),statisticsOpen=ref(false)
 const loading=ref(false),error=ref(''),fullscreen=ref(false),automatic=ref(false),seriesKey=ref(''),dailyPage=ref(1),showDaily=ref(false)
 let refreshTimer:ReturnType<typeof setInterval>|undefined
 const series=computed(()=>data.value?.trend.series.filter(item=>!seriesKey.value||item.key===seriesKey.value)||[])
@@ -26,14 +27,14 @@ async function toggleFullscreen(){error.value='';try{
   else error.value='当前浏览器不支持全屏展示'
 }catch{error.value='无法进入全屏，请检查浏览器设置'}}
 function fullscreenChanged(){fullscreen.value=document.fullscreenElement===board.value}
-onMounted(()=>{void load();document.addEventListener('fullscreenchange',fullscreenChanged);refreshTimer=setInterval(()=>{if(automatic.value&&!loading.value&&!document.hidden)void load()},60000)})
+onMounted(()=>{void load();document.addEventListener('fullscreenchange',fullscreenChanged);refreshTimer=setInterval(()=>{if(automatic.value&&!loading.value&&!statisticsOpen.value&&!document.hidden)void load()},60000)})
 onBeforeUnmount(()=>{requests.dispose();clearInterval(refreshTimer);document.removeEventListener('fullscreenchange',fullscreenChanged);if(document.fullscreenElement===board.value)void document.exitFullscreen()})
 </script>
 <template>
   <div ref="board" class="data-screen" :class="{'is-fullscreen':fullscreen}">
     <section class="card screen-toolbar">
-      <div><strong>{{data?.organization||'当前组织'}}</strong><p class="muted">{{data?'更新于 '+formatTimestamp(data.generated_at):'综合业务统计'}}</p></div>
-      <div class="screen-controls"><label>新增统计周期<select :value="days" :disabled="loading" @change="load(Number(($event.target as HTMLSelectElement).value) as 7|30|90)"><option :value="7">近 7 天</option><option :value="30">近 30 天</option><option :value="90">近 90 天</option></select></label><label class="check-label"><input v-model="automatic" type="checkbox">每分钟刷新</label><button class="secondary" :disabled="loading" @click="load()">{{loading?'更新中…':'刷新数据'}}</button><button class="secondary" @click="toggleFullscreen">{{fullscreen?'退出全屏':'全屏展示'}}</button></div>
+      <div class="screen-identity"><strong>{{data?.organization||'当前组织'}}</strong><span class="muted screen-updated">{{data?'更新于 '+formatTimestamp(data.generated_at):'综合业务统计'}}</span></div>
+      <div class="screen-controls"><label>新增统计周期<select :value="days" :disabled="loading" @change="load(Number(($event.target as HTMLSelectElement).value) as 7|30|90)"><option :value="7">近 7 天</option><option :value="30">近 30 天</option><option :value="90">近 90 天</option></select></label><label class="check-label"><input v-model="automatic" type="checkbox">每分钟刷新</label><button class="secondary" :disabled="loading" @click="load()">{{loading?'更新中…':'刷新数据'}}</button><button v-if="can('ai.read')&&can('ai.generate')" class="secondary" :disabled="loading||!data?.metrics.length" @click="statisticsOpen=true">AI 统计解读</button><button class="secondary" @click="toggleFullscreen">{{fullscreen?'退出全屏':'全屏展示'}}</button></div>
     </section>
     <p v-if="error" class="error" role="alert">{{error}} <span v-if="data">当前仍显示上次成功获取的数据。</span></p>
     <p v-if="loading&&!data" class="card muted" role="status">正在汇总授权范围内的数据…</p>
@@ -47,7 +48,7 @@ onBeforeUnmount(()=>{requests.dispose();clearInterval(refreshTimer);document.rem
         <template v-if="showDaily"><div class="table-wrap"><table><thead><tr><th scope="col" class="row-number">序号</th><th scope="col">日期</th><th v-for="item in data.trend.series" :key="item.key" scope="col">{{item.label}}</th></tr></thead><tbody><tr v-for="row in dailyRows" :key="row.date"><td class="row-number">{{row.index+1}}</td><td>{{row.date}}</td><td v-for="item in data.trend.series" :key="item.key">{{item.values[row.index]}}</td></tr></tbody></table></div><Pagination :page="dailyPage" :total="data.trend.dates.length" @change="dailyPage=$event" /></template>
       </section>
       <div class="screen-distributions"><DistributionPanel v-if="data.breakdowns.intake" title="接警类型分布" :items="data.breakdowns.intake"/><DistributionPanel v-if="data.breakdowns.tasks" title="核查工单状态" :items="data.breakdowns.tasks"/><DistributionPanel v-if="data.breakdowns.models" title="业务模型状态" :items="data.breakdowns.models"/><DistributionPanel v-if="data.breakdowns.results" title="污水检测复核状态" :items="data.breakdowns.results"/><DistributionPanel v-if="data.breakdowns.sites" title="采样点运行状态" :items="data.breakdowns.sites"/></div>
-      <section class="card screen-notes"><p class="muted">{{data.date_basis}} 大屏只显示当前组织及当前角色可查询的模块，不包含业务原文或个人明细。</p><button v-if="can('ai.generate')" class="secondary" @click="workspacePage='智能研判'">前往 AI 统计解读</button></section>
     </template>
+    <StatisticsDialog :open="statisticsOpen" :days="days" :organization="data?.organization||'当前组织'" @close="statisticsOpen=false"/>
   </div>
 </template>

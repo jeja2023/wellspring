@@ -22,8 +22,8 @@ export function createPersons(d:Deps) {
     await d.command('person-draft','/person-drafts',{name:name.value,source:source.value,...extra})
     if (!current()) throw new RequestCancelled()
     saved=true
-    name.value='';source.value='';d.notice.value='人员草稿已创建，身份尚未核验'
-    try {await load(1)} catch (e) {if (isCancelled(e)) throw e; d.error.value='草稿已创建，但列表刷新失败。请重新查看，避免重复提交。'}
+    name.value='';source.value='';d.notice.value='人员记录已创建，身份尚未核验'
+    try {await load(1)} catch (e) {if (isCancelled(e)) throw e; d.error.value='记录已创建，但列表刷新失败。请重新查看，避免重复提交。'}
   });return saved}
   function reset(){view.value='all';queries.cancel();people.value=[];page.value=1;total.value=0;name.value='';source.value='';searchInput.value='';appliedSearch.value=''}
   return {chooseView,view,people,page,total,name,source,searchInput,appliedSearch,search,clearSearch,activate,move,create,reset}

@@ -1,4 +1,4 @@
-"""虚构数据的案件 CSV 暂存与新增草稿导入；不更新已有案件。"""
+"""虚构数据的案件 CSV 暂存与新增记录导入；不更新已有案件。"""
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Header, Query, Request
 from pydantic import BaseModel, Field

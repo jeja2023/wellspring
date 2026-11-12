@@ -1,6 +1,7 @@
 """Bounded, permission-scoped maps of facilities and incident locations only."""
 from pathlib import Path
 import json
+import math
 import os
 from typing import Literal
 from fastapi import APIRouter, Depends, Header, Query, Request
@@ -60,6 +61,24 @@ def tile_root():
     return Path(configured).resolve() if configured else None
 
 
+def tile_options():
+    """Explicit deployment metadata; never infer a coordinate system from images."""
+    coordinate_system = os.environ.get('WELLSPRING_MAP_TILE_CRS', 'WGS84').strip().upper()
+    if coordinate_system not in {'WGS84', 'GCJ02'}:
+        raise ValueError('Unsupported tile coordinate system')
+    minimum = int(os.environ.get('WELLSPRING_MAP_MIN_ZOOM', '0'))
+    maximum = int(os.environ.get('WELLSPRING_MAP_MAX_ZOOM', '20'))
+    zoom = int(os.environ.get('WELLSPRING_MAP_INITIAL_ZOOM', '13'))
+    # AMap city center for Wuxi; WGS84 value uses the same approximate offline inverse as the client.
+    default_center = '120.301663,31.574729' if coordinate_system == 'GCJ02' else '120.297066,31.576634'
+    longitude, latitude = map(float, os.environ.get('WELLSPRING_MAP_CENTER', default_center).split(','))
+    if not (0 <= minimum <= zoom <= maximum <= 20 and math.isfinite(longitude) and math.isfinite(latitude)
+            and -180 <= longitude <= 180 and -85 <= latitude <= 85):
+        raise ValueError('Invalid offline map view')
+    return {'tile_coordinate_system': coordinate_system, 'min_zoom': minimum, 'max_zoom': maximum,
+            'initial_view': {'longitude': longitude, 'latitude': latitude, 'zoom': zoom}}
+
+
 def create_router(error, audit, reserve, finish, page_result, request_id):
     router = APIRouter(prefix='/api/geography', tags=['业务地图'])
 
@@ -108,7 +127,11 @@ def create_router(error, audit, reserve, finish, page_result, request_id):
     @router.get('/config')
     def config(user: User = Depends(current_user), db: Session = Depends(get_db)):
         root = tile_root()
-        return {'coordinate_system': 'WGS84', 'tiles_available': bool(root and root.is_dir()),
+        try:
+            options = tile_options()
+        except (ValueError, TypeError):
+            raise error(503, 'MAP_CONFIG_INVALID', '离线地图配置无效，请检查底图坐标系、级别和初始范围') from None
+        return {'coordinate_system': 'WGS84', **options, 'tiles_available': bool(root and root.is_dir()),
             'attribution': os.environ.get('WELLSPRING_MAP_ATTRIBUTION', '本地授权底图')[:500],
             'layers': [kind for kind, prefix in RESOURCE_PERMISSIONS.items() if prefix + '.read' in effective_permissions(db, user)]}
 
@@ -137,11 +160,21 @@ def create_router(error, audit, reserve, finish, page_result, request_id):
         root = tile_root()
         if root is None or not root.is_dir() or not 0 <= z <= 20 or not 0 <= x < 2 ** z or not 0 <= y < 2 ** z:
             raise error(404, 'TILE_NOT_FOUND', '当前位置无离线底图')
-        path = (root / str(z) / str(x) / (str(y) + '.png')).resolve()
-        if not path.is_relative_to(root) or not path.is_file() or path.stat().st_size > 2_000_000:
+        candidates = [root / str(z) / str(x) / (str(y) + '.png'), root / str(z) / str(x) / str(y) / 'tile.png']
+        raw = None
+        for candidate in candidates:
+            try:
+                path = candidate.resolve()
+                if not path.is_relative_to(root) or not path.is_file():
+                    continue
+                with path.open('rb') as stream:
+                    raw = stream.read(2_000_001)
+                break
+            except OSError:
+                continue
+        if raw is None or len(raw) > 2_000_000:
             raise error(404, 'TILE_NOT_FOUND', '当前位置无离线底图')
         # Read the validated local bytes; never make network requests or expose paths.
-        raw = path.read_bytes()
         if not raw.startswith(b'\x89PNG\r\n\x1a\n'): raise error(404, 'TILE_NOT_FOUND', '底图文件格式不支持')
         return Response(raw, media_type='image/png', headers={'Cache-Control': 'private, no-store'})
 

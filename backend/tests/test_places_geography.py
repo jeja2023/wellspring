@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy import func, select, text
 from fastapi.testclient import TestClient
 from wellspring.main import app
+from wellspring.geography import tile_options
 from wellspring.models import Clue, Organization, User, now
 from wellspring.place_models import GeoLocation, GeoLocationEvent, Place, PlaceIncident, PlaceInspection
 from wellspring.access_models import Role
@@ -140,3 +141,42 @@ def test_offline_tiles_are_authenticated_bounded_and_confined(context,tmp_path,m
     assert client.get('/api/geography/tiles/21/0/0.png',headers=a).status_code==404
     assert client.get('/api/geography/tiles/0/1/0.png',headers=a).status_code==404
     assert client.get('/api/geography/config',headers=a).json()['tiles_available']
+
+
+def test_nested_amap_tiles_and_explicit_coordinate_metadata(context,tmp_path,monkeypatch):
+    client, _, a, _, _ = prepare(context)
+    monkeypatch.setenv('WELLSPRING_MAP_TILE_DIR',str(tmp_path))
+    monkeypatch.setenv('WELLSPRING_MAP_TILE_CRS','GCJ02')
+    monkeypatch.setenv('WELLSPRING_MAP_MIN_ZOOM','0')
+    monkeypatch.setenv('WELLSPRING_MAP_MAX_ZOOM','16')
+    monkeypatch.setenv('WELLSPRING_MAP_CENTER','120.061340,31.550453')
+    monkeypatch.setenv('WELLSPRING_MAP_INITIAL_ZOOM','11')
+    folder=tmp_path/'4'/'13'/'6';folder.mkdir(parents=True)
+    raw=b'\x89PNG\r\n\x1a\nSYNTHETIC-NESTED'
+    (folder/'tile.png').write_bytes(raw)
+    response=client.get('/api/geography/tiles/4/13/6.png',headers=a)
+    assert response.status_code==200 and response.content==raw
+    config=client.get('/api/geography/config',headers=a).json()
+    assert config['coordinate_system']=='WGS84' and config['tile_coordinate_system']=='GCJ02'
+    assert config['max_zoom']==16 and config['initial_view']=={'longitude':120.061340,'latitude':31.550453,'zoom':11}
+    # Flat layout stays compatible and has deterministic precedence.
+    (folder.parent/'6.png').write_bytes(b'\x89PNG\r\n\x1a\nFLAT')
+    assert client.get('/api/geography/tiles/4/13/6.png',headers=a).content.endswith(b'FLAT')
+    (folder.parent/'6.png').unlink()
+    (folder/'tile.png').write_bytes(b'not-a-png')
+    assert client.get('/api/geography/tiles/4/13/6.png',headers=a).status_code==404
+    (folder/'tile.png').write_bytes(b'\x89PNG\r\n\x1a\n'+b'x'*2_000_000)
+    assert client.get('/api/geography/tiles/4/13/6.png',headers=a).status_code==404
+    for key,value in [('WELLSPRING_MAP_TILE_CRS','BD09'),('WELLSPRING_MAP_CENTER','nan,30'),('WELLSPRING_MAP_MAX_ZOOM','3')]:
+        with monkeypatch.context() as scoped:
+            scoped.setenv(key,value)
+            response=client.get('/api/geography/config',headers=a)
+            assert response.status_code==503 and response.json()['code']=='MAP_CONFIG_INVALID'
+
+
+def test_map_default_view_uses_wuxi_center_in_the_configured_tile_coordinates(monkeypatch):
+    for key in ['WELLSPRING_MAP_TILE_CRS','WELLSPRING_MAP_MIN_ZOOM','WELLSPRING_MAP_MAX_ZOOM','WELLSPRING_MAP_CENTER','WELLSPRING_MAP_INITIAL_ZOOM']:
+        monkeypatch.delenv(key,raising=False)
+    assert tile_options()['initial_view']=={'longitude':120.297066,'latitude':31.576634,'zoom':13}
+    monkeypatch.setenv('WELLSPRING_MAP_TILE_CRS','GCJ02')
+    assert tile_options()['initial_view']=={'longitude':120.301663,'latitude':31.574729,'zoom':13}

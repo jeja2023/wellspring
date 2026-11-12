@@ -1,4 +1,4 @@
-"""未核验人员草稿与案件的候选关系，不产生正式人员关联。"""
+"""未核验人员档案与案件的候选关系，不产生正式人员关联。"""
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Header, Query, Request
 from pydantic import BaseModel, Field
@@ -51,7 +51,7 @@ def create_router(error,audit,reserve,finish,page_result,request_id):
         record,replay=reserve(db,user,"PERSON_CASE_CANDIDATE_CREATE",key,body)
         if replay:return replay
         changed=db.execute(update(PersonDraft).where(PersonDraft.id==person.id,PersonDraft.org_id==user.org_id,PersonDraft.version==data.person_version).values(version=PersonDraft.version+1))
-        if changed.rowcount!=1:raise error(409,"VERSION_CONFLICT","人员草稿已变化，请重新查看")
+        if changed.rowcount!=1:raise error(409,"VERSION_CONFLICT","人员档案已变化，请重新查看")
         candidate=PersonCaseCandidate(org_id=user.org_id,person_id=person.id,case_id=case.id,basis=basis,status="ACTIVE",version=1,created_by=user.id)
         db.add(candidate)
         try:db.flush()

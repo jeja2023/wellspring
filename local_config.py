@@ -110,7 +110,9 @@ def ai_environment(base: dict[str, str], root: Path = ROOT) -> dict[str, str]:
     path = root / '.env'
     if path.is_file():
         values = read_env(path)
-        for key in ('WELLSPRING_AI_ALLOWED_HOSTS', 'WELLSPRING_AI_API_KEY', 'WELLSPRING_AI_API_KEY_FILE', 'WELLSPRING_AI_SECRET_DIR', 'WELLSPRING_MAP_TILE_DIR', 'WELLSPRING_MAP_ATTRIBUTION'):
+        for key in ('WELLSPRING_AI_ALLOWED_HOSTS', 'WELLSPRING_AI_API_KEY', 'WELLSPRING_AI_API_KEY_FILE', 'WELLSPRING_AI_SECRET_DIR',
+                    'WELLSPRING_MAP_TILE_DIR', 'WELLSPRING_MAP_ATTRIBUTION', 'WELLSPRING_MAP_TILE_CRS',
+                    'WELLSPRING_MAP_MIN_ZOOM', 'WELLSPRING_MAP_MAX_ZOOM', 'WELLSPRING_MAP_CENTER', 'WELLSPRING_MAP_INITIAL_ZOOM'):
             if key not in env and key in values:
                 env[key] = values[key]
     return env

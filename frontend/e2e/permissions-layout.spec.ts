@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test'
 
-test('权限表格与管理页布局一致，筛选、分页、草稿保护及授权保存可用',async({page},testInfo)=>{
+test('权限表格与管理页布局一致，筛选、分页、未保存更改保护及授权保存可用',async({page},testInfo)=>{
   await page.setViewportSize({width:1920,height:1080})
   await page.goto('/')
   await page.getByLabel('账号',{exact:true}).fill('superadmin')

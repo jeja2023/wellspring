@@ -115,7 +115,7 @@ def create_router(error,audit,reserve,finish,page_result,request_id):
         try:db.flush()
         except IntegrityError:
             db.rollback();raise error(409,'CODE_EXISTS','当前组织已有相同编号，请换用其他编号') from None
-        snapshot(db,user,row,'CREATED','创建草稿');audit(db,user,'ANALYSIS_ASSET_CREATE',row.id);result=asset_json(row,True);finish(record,result,201,row.id);db.commit();return result
+        snapshot(db,user,row,'CREATED','创建记录');audit(db,user,'ANALYSIS_ASSET_CREATE',row.id);result=asset_json(row,True);finish(record,result,201,row.id);db.commit();return result
 
     @router.get('/{area}/{identity}')
     def detail(area:str,identity:str,request:Request,page:int=Query(1,ge=1,le=100000),user:User=Depends(current_user),db:Session=Depends(get_db)):
@@ -130,8 +130,8 @@ def create_router(error,audit,reserve,finish,page_result,request_id):
         kind(area);lock_flow(db,user,area+'.write',error,area+'.read');row=visible(db,user,area,identity);validate(data,user,db,area);record,replay=reserve(db,user,'ANALYSIS_UPDATE',key,{'id':row.id,**data.model_dump()})
         if replay:return replay
         changed=db.execute(update(Asset).where(Asset.id==row.id,Asset.version==data.version,Asset.status=='DRAFT').values(name=data.name,category=data.category,description=data.description,config_json=json.dumps(data.configuration,ensure_ascii=False),project_id=data.project_id,model_id=data.model_id,updated_by=user.id,updated_at=now(),version=Asset.version+1)).rowcount
-        if not changed:raise error(409,'VERSION_OR_STATE_CONFLICT','仅草稿可编辑，请停用或重新查看最新版本')
-        db.refresh(row);snapshot(db,user,row,'UPDATED','修改草稿');audit(db,user,'ANALYSIS_ASSET_UPDATE',row.id);result=asset_json(row,True);finish(record,result,200,row.id);db.commit();return result
+        if not changed:raise error(409,'VERSION_OR_STATE_CONFLICT','仅未启用资料可编辑，请停用或重新查看最新版本')
+        db.refresh(row);snapshot(db,user,row,'UPDATED','修改登记资料');audit(db,user,'ANALYSIS_ASSET_UPDATE',row.id);result=asset_json(row,True);finish(record,result,200,row.id);db.commit();return result
 
     @router.post('/{area}/{identity}/transition')
     def transition(area:str,identity:str,data:Transition,user:User=Depends(current_user),db:Session=Depends(get_db),key:str|None=Header(None,alias='Idempotency-Key')):

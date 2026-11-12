@@ -6,3 +6,6 @@
 .flow-fields{border:0;padding:0;margin:0;min-width:0}
 
 .flow-stages .is-current{background:#153b5b;color:white;font-weight:600}
+
+.intelligence-header{display:flex;align-items:center;justify-content:space-between;gap:12px 20px;flex-wrap:wrap;margin-bottom:20px}.intelligence-header .intelligence-tabs{margin:0}.intelligence-header>button{margin-left:auto;flex-shrink:0}.clue-search{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}.clue-search-keyword{flex:0 1 320px;max-width:100%;min-width:200px}.clue-search-status{width:180px}.clue-search input,.clue-search select{margin:8px 0 0}.clue-search-actions{display:flex;gap:10px;flex:none}
+@media(max-width:800px){.clue-search-keyword{flex-basis:100%;min-width:0}.clue-search-status{flex:1;min-width:140px}}

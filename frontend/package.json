@@ -1,7 +1,7 @@
 {
   "name": "wellspring-web",
   "private": true,
-  "version": "0.0.6",
+  "version": "0.0.7",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -10,6 +10,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "coordtransform": "2.1.2",
     "exceljs": "4.4.0",
     "leaflet": "1.9.4",
     "vue": "3.5.45"

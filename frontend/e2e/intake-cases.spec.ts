@@ -20,7 +20,7 @@ test('接警新建和关联案件、保留来源快照、撤销及重新关联',
   await dialog.getByLabel('案件名称',{exact:true}).fill('合成转办案件')
   await dialog.getByLabel('转办 / 关联依据',{exact:true}).fill('核对合成接警后转办')
   await dialog.getByRole('button',{name:'确认创建并关联',exact:true}).click()
-  await expect(dialog.getByText('案件草稿已创建，原接警信息和来源快照已保留。')).toBeVisible()
+  await expect(dialog.getByText('案件记录已创建，原接警信息和来源快照已保留。')).toBeVisible()
   await expect(dialog.getByRole('button',{name:'确认创建并关联',exact:true})).toHaveCount(0)
   await dialog.getByRole('button',{name:'查看案件',exact:true}).click()
   const caseRow=page.getByRole('row').filter({hasText:number})

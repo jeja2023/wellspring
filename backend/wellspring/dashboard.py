@@ -23,10 +23,10 @@ def overview(db: Session, user: User, days: int, instant: datetime | None = None
     metrics, series, breakdowns = [], [], {}
     specifications = [
         ("intake", "接警信息", "条", CaseInformation, [CaseInformation.deleted_at.is_(None)]),
-        ("cases", "案件草稿", "件", Case, []),
+        ("cases", "案件记录", "件", Case, []),
         ("models", "业务模型", "个", AnalysisAsset, [AnalysisAsset.kind=="MODEL"]),
         ("intelligence", "情报线索", "条", Clue, []),
-        ("persons", "人员草稿", "份", PersonDraft, []),
+        ("persons", "人员档案", "份", PersonDraft, []),
         ("wastewater", "采样记录", "份", WastewaterSample, []),
     ]
     for key, label, unit, model, extra in specifications:
@@ -65,7 +65,7 @@ def overview(db: Session, user: User, days: int, instant: datetime | None = None
             [("OPEN", "待办理"), ("PENDING_REVIEW", "待复核"), ("RETURNED", "已退回"), ("CLOSED", "已关闭")])
     if "models.read" in permissions:
         counts=dict(db.execute(select(AnalysisAsset.status,func.count()).where(AnalysisAsset.org_id==user.org_id,AnalysisAsset.kind=='MODEL').group_by(AnalysisAsset.status)).all())
-        breakdowns['models']=[{'key':key,'label':label,'value':int(counts.get(key,0))} for key,label in [('DRAFT','草稿'),('ACTIVE','已启用'),('ARCHIVED','已归档')]]
+        breakdowns['models']=[{'key':key,'label':label,'value':int(counts.get(key,0))} for key,label in [('DRAFT','未启用'),('ACTIVE','已启用'),('ARCHIVED','已归档')]]
     if "wastewater.read" in permissions:
         breakdowns["results"] = states(WastewaterResult, WastewaterResult.state,
             [("DRAFT", "待复核"), ("RETURNED", "已退回"), ("REVIEWED", "已复核")])

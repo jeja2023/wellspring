@@ -1,21 +1,32 @@
 <script setup lang="ts">
+import {onBeforeUnmount,onMounted} from 'vue'
 import Pagination from '../../shared/components/Pagination.vue'
-import { formatTimestamp } from '../../shared/time'
-import { onBeforeUnmount, onMounted,ref } from 'vue'
-import { useWorkspace } from '../../app/workspace'
-import { createLatestRequests, isCancelled } from '../../shared/api/client'
-type Audit={id:string;action:string;object_id:string;created_at:string}
-type Page={items:Audit[];total:number;has_more:boolean}
-const {api}=useWorkspace()
-const pageRequests = createLatestRequests(api)
-onBeforeUnmount(() => pageRequests.dispose())
-const request = (path: string, options: RequestInit = {}) => pageRequests.latest(path.split('?')[0], path, options)
-const items=ref<Audit[]>([]),page=ref(1),total=ref(0),more=ref(false),loading=ref(false),error=ref('')
-async function load(next=page.value){loading.value=true;error.value='';try{const r:Page=await request(`/audit/mine?page=${next}&page_size=20`);items.value=r.items;total.value=r.total;more.value=r.has_more;page.value=next}catch(e){if(isCancelled(e))return;items.value=[];total.value=0;more.value=false;error.value=e instanceof Error?e.message:'加载失败'}finally{loading.value=false}}
-onMounted(()=>load())
+import {formatTimestamp} from '../../shared/time'
+import {useWorkspace} from '../../app/workspace'
+import {AUDIT_PAGE_SIZE,createAuditHistory} from './controller'
+const {api}=useWorkspace(),history=createAuditHistory(api,'mine')
+const {filters,items,page,total,more,loading,error,load,search,reset}=history
+onMounted(()=>load());onBeforeUnmount(history.dispose)
 </script>
+
 <template>
-
-
-  <section class="card"><p class="muted">仅显示本人操作记录；读取本页面本身也会产生一条审计记录。时间为北京时间。</p><p v-if="error" class="error" role="alert">{{error}} <button class="link" @click="load()">重试</button></p><p v-if="loading" role="status">正在加载…</p><div v-else class="table-wrap"><table class="audit-table"><thead><tr><th scope="col" class="row-number">序号</th><th scope="col">动作代码</th><th scope="col">对象标识</th><th scope="col">记录时间</th></tr></thead><tbody><tr v-for="(item, index) in items" :key="item.id"><td class="row-number">{{(page-1)*20+index+1}}</td><td>{{item.action}}</td><td>{{item.object_id}}</td><td>{{formatTimestamp(item.created_at)}}</td></tr></tbody></table><p v-if="!items.length" class="empty">暂无记录</p></div><Pagination :page="page" :total="total" :loading="loading" :has-more="more" @change="load($event)" /></section>
+  <section class="card">
+    <form class="list-filters audit-filters" @submit.prevent="search">
+      <label class="list-filter-keyword">操作内容<input v-model="filters.action" maxlength="80" placeholder="输入操作名称，如创建案件"></label>
+      <label class="list-filter-keyword audit-object-filter">对象标识<input v-model="filters.object_id" maxlength="36" placeholder="输入对象标识"></label>
+      <label class="list-filter-select audit-date-filter">开始日期<input v-model="filters.start_date" type="date" :max="filters.end_date||undefined"></label>
+      <label class="list-filter-select audit-date-filter">结束日期<input v-model="filters.end_date" type="date" :min="filters.start_date||undefined"></label>
+      <div class="list-filter-actions"><button :disabled="loading">查询</button><button type="button" class="secondary" :disabled="loading" @click="reset">重置</button></div>
+      <button type="button" class="secondary audit-refresh" :disabled="loading" @click="load()">刷新记录</button>
+    </form>
+    <p v-if="error" class="error" role="alert">{{error}} <button type="button" class="link" :disabled="loading" @click="load()">重试</button></p>
+    <p v-if="loading" role="status">正在加载…</p>
+    <div class="table-wrap"><table class="audit-table" aria-label="本人操作记录"><thead><tr><th scope="col" class="row-number">序号</th><th scope="col">操作内容</th><th scope="col">对象标识</th><th scope="col">记录时间</th></tr></thead>
+      <tbody><tr v-for="(item,index) in items" :key="item.id"><td class="row-number">{{(page-1)*AUDIT_PAGE_SIZE+index+1}}</td><td>{{item.action_name||'其他操作'}}</td><td>{{item.object_id}}</td><td>{{formatTimestamp(item.created_at)}}</td></tr></tbody></table><p v-if="!items.length&&!loading" class="empty">暂无符合条件的记录</p></div>
+    <Pagination :page="page" :total="total" :page-size="AUDIT_PAGE_SIZE" :loading="loading" :has-more="more" @change="load($event)"/>
+  </section>
 </template>
+
+<style scoped>
+.audit-filters .audit-object-filter{flex-basis:180px}.audit-filters .audit-date-filter{flex-basis:150px}.audit-refresh{margin-left:auto}
+</style>

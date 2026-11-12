@@ -30,7 +30,7 @@ test('点位、采样、检测、独立复核与同口径趋势闭环', async ({
   await page.getByLabel('检测实验室',{exact:true}).fill('合成实验室')
   await page.getByLabel('检测方法',{exact:true}).fill('合成方法')
   await page.getByLabel('报告编号 / 版本',{exact:true}).fill(`REPORT-${stamp}`)
-  await page.getByRole('button',{name:'保存结果草稿',exact:true}).click()
+  await page.getByRole('button',{name:'保存检测结果',exact:true}).click()
   const row=page.getByRole('row').filter({hasText:sample})
   await expect(row).toContainText('待复核')
   await expect(row.getByRole('button',{name:'复核',exact:true})).toHaveCount(0)

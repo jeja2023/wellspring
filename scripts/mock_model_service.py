@@ -17,7 +17,7 @@ def start_mock_model():
             calls.append({"path": self.path, "body": data, "authorization": self.headers.get("Authorization", "")})
             model = data.get("model", "")
             status = 401 if model == "synthetic-auth-error" else 200
-            output = {"choices": [{"message": {"content": "合成模型草稿：资料中的信息需要人工核验。<script>不得执行</script>"}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 30, "completion_tokens": 20}}
+            output = {"choices": [{"message": {"content": "合成研判结果：资料中的信息需要人工核验。<script>不得执行</script>"}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 30, "completion_tokens": 20}}
             if status != 200:
                 output = {"error": {"message": "synthetic upstream private detail"}}
             if model == "synthetic-malformed": output = {"choices": []}

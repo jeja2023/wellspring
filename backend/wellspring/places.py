@@ -182,10 +182,11 @@ def create_router(error, audit, reserve, finish, page_result, request_id):
         return saved(db, user, row, record, 'STATE_CHANGED', data.note)
 
     @router.get('/{identity}/{area}')
-    def records(identity: str, area: Literal['inspections', 'incidents', 'history'], request: Request, page: int = Query(1, ge=1, le=100000), user: User = Depends(current_user), db: Session = Depends(get_db)):
+    def records(identity: str, area: Literal['inspections', 'incidents', 'history'], request: Request, page: int = Query(1, ge=1, le=100000), focus_id: str | None = Query(None,max_length=36), user: User = Depends(current_user), db: Session = Depends(get_db)):
         visible(db, user, Place, identity)
         model = {'inspections': PlaceInspection, 'incidents': PlaceIncident, 'history': PlaceEvent}[area]
         filters = [model.place_id == identity, model.org_id == user.org_id]
+        if focus_id: filters.append(model.id == focus_id)
         total = db.scalar(select(func.count()).select_from(model).where(*filters)) or 0
         rows = db.scalars(select(model).where(*filters).order_by(model.created_at.desc(), model.id.desc()).offset((page-1)*20).limit(20)).all()
         items = [row_json(row) for row in rows]
@@ -266,8 +267,8 @@ def create_router(error, audit, reserve, finish, page_result, request_id):
         record, replay = reserve(db, user, 'PLACE_INCIDENT_CLUE', key, {'id': identity, **data.model_dump()})
         if replay: return replay
         check_version(row, data.version)
-        if row.status not in {'OPEN', 'SUBMITTED', 'CLOSED'}: raise error(409, 'INVALID_STATE', '事件核验后才能显式新建线索草稿')
-        if row.clue_id: raise error(409, 'ALREADY_LINKED', '该事件已建立线索草稿')
+        if row.status not in {'OPEN', 'SUBMITTED', 'CLOSED'}: raise error(409, 'INVALID_STATE', '事件核验后才能显式新建线索')
+        if row.clue_id: raise error(409, 'ALREADY_LINKED', '该事件已建立线索记录')
         clue = Clue(org_id=user.org_id, title=row.title, summary=row.facts + '\n资料引用：' + row.material_ref + '\n转录说明：' + data.note,
             source='重点场所事件', reference_no='PLACE-' + row.id, created_by=user.id)
         db.add(clue); db.flush()

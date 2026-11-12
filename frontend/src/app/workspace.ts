@@ -4,6 +4,7 @@ import { newIdempotencyKey } from '../shared/api/idempotency'
 import { createIntelligence } from '../features/intelligence/controller'
 import { createPersons } from '../features/persons/controller'
 import type {ResourceType} from '../features/geography/types'
+import type {WorkFocus,WorkModule} from '../features/dashboard/workbench'
 
 export function createWorkspace() {
 type Case = { id: string; number: string; title: string; status: string }
@@ -20,6 +21,18 @@ function stored(key:string) { try { return storage()?.getItem(key) ?? '' } catch
 function save(key:string, value:string) { try { storage()?.setItem(key,value) } catch { /* 页面仍可在本次加载期间使用 */ } }
 function remove(key:string) { try { storage()?.removeItem(key) } catch { /* 浏览器可能禁用存储 */ } }
 const page = ref('工作台'), error = ref(''), notice = ref('')
+const workbenchFocus=ref<WorkFocus|null>(null),quickCreate=ref('')
+function takeWorkbenchFocus(module:WorkModule){const value=workbenchFocus.value;if(value?.module!==module)return null;workbenchFocus.value=null;return value}
+function openWorkbenchTask(item:WorkFocus){
+  if(!can(item.module+'.read'))return
+  workbenchFocus.value={module:item.module,kind:item.kind,id:item.id,resource_id:item.resource_id,tab:item.tab,keyword:item.keyword};quickCreate.value=''
+  page.value={intelligence:'情报线索',persons:'人员档案',places:'重点场所',wastewater:'污水监测'}[item.module]
+}
+function startWork(action:string){
+  const targets:Record<string,[string,string]>={case:['案件管理','cases'],clue:['情报线索','intelligence'],person:['人员档案','persons'],place:['重点场所','places'],sample:['污水监测','wastewater']}
+  const target=targets[action];if(!target||!can(target[1]+'.read')||!can(target[1]+'.write'))return
+  workbenchFocus.value=null;quickCreate.value=action;page.value=target[0]
+}
 const geographyFocus=ref<{type:ResourceType;id:string}|null>(null),placeFocus=ref('')
 function openMap(type:ResourceType,id:string){geographyFocus.value={type,id};page.value='业务地图'}
 function openPlace(id:string){placeFocus.value=id;page.value='重点场所'}
@@ -39,7 +52,7 @@ const menuGroups=computed(()=>[
     ...(can('geography.read')?['业务地图']:[]),
   ]},
   {label:'业务办理',items:(
-    [['接警信息','intake.read'],['情报线索','intelligence.read'],['案件管理','cases.read'],
+    [['接警信息','intake.read'],['案件管理','cases.read'],['情报线索','intelligence.read'],
      ['人员档案','persons.read'],['重点场所','places.read'],['污水监测','wastewater.read']] as const
   ).filter(([,permission])=>can(permission)).map(([name])=>name)},
   {label:'分析研判',items:[
@@ -103,6 +116,7 @@ function clearSession() {
   remove(sessionKey); remove(pageKey); remove(legacyPageKey)
   token.value=''; username.value=''; password.value=''; organization.value=''; isAdmin.value=false; page.value='工作台'
   permissions.value=null;roleName.value='';geographyFocus.value=null;placeFocus.value=''
+  workbenchFocus.value=null;quickCreate.value=''
   cases.value=[]
   search.value=''; caseQuery.value=''; casePage.value=1; caseTotal.value=0
   caseNumber.value='';caseTitle.value='';pendingKeys.clear();intelligence.reset();persons.reset()
@@ -124,12 +138,11 @@ async function restoreSession() {
     const savedPage = ['数据建模','模型管理','技战法库'].includes(oldPage)?'分析建模':['智能解析','模型服务'].includes(oldPage)?'智能研判':oldPage==='数据导入'?'案件管理':oldPage === '污水毒情监测' ? '污水监测' : ['权限审计', '我的操作记录'].includes(oldPage) ? '操作记录' : oldPage
     page.value = menu.value.includes(savedPage) ? savedPage : '工作台'
     save(pageKey, page.value); remove(legacyPageKey)
-    try { await refresh() } catch (e) { if (isCancelled(e)) return; error.value = '登录已恢复，但数据加载失败，请重新查询。' }
   } catch (e) {
     if (!isCancelled(e) && !(e instanceof ApiError && e.status === 401)) restoreError.value = '无法连接服务器，无法确认登录状态。请重试。'
   } finally { restoring.value = false }
 }
-async function login() { await run(async()=>{ const result=await api('/login',{method:'POST',body:JSON.stringify({username:username.value,password:password.value})}); token.value=result.token; username.value=result.username; organization.value=result.organization; applyIdentity(result); password.value=''; save(sessionKey,result.token); save(pageKey,'工作台'); try { await refresh() } catch (e) { if (!isCancelled(e)) error.value = '登录成功，但数据加载失败，请重新查询。' } }) }
+async function login() { await run(async()=>{ const result=await api('/login',{method:'POST',body:JSON.stringify({username:username.value,password:password.value})}); token.value=result.token; username.value=result.username; organization.value=result.organization; applyIdentity(result); password.value=''; save(sessionKey,result.token); save(pageKey,'工作台'); }) }
 async function logout() {
   const previousToken = token.value || stored(sessionKey)
   clearSession()
@@ -139,12 +152,12 @@ async function logout() {
     if (current() && !(e instanceof ApiError && e.status === 401)) error.value = '本机登录信息已清除，但服务端退出结果未确认。'
   }
 }
-async function makeCase() { let saved=false;await run(async()=>{ const current=requests.capture(); await command('case','/cases',{number:caseNumber.value,title:caseTitle.value}); if(!current())return;saved=true; caseNumber.value='';caseTitle.value=''; await refreshAfterWrite('案件草稿已创建') });return saved }
+async function makeCase() { let saved=false;await run(async()=>{ const current=requests.capture(); await command('case','/cases',{number:caseNumber.value,title:caseTitle.value}); if(!current())return;saved=true; caseNumber.value='';caseTitle.value=''; await refreshAfterWrite('案件记录已创建') });return saved }
 const intelligence = createIntelligence({api, can, captureSession:requests.capture, username, notice, error, run, command})
 const persons = createPersons({api,captureSession:requests.capture,notice,error,run,command})
 async function openCase(number:string) {search.value=number;caseQuery.value=number;casePage.value=1;page.value='案件管理';await run(()=>loadCases(1,number))}
 const filteredCases = computed(()=>cases.value)
-return {geographyFocus,placeFocus,openMap,openPlace,intelligence,persons,api,captureSession:requests.capture,command,run,openCase,can,permissions,roleName,refreshCases:()=>run(()=>loadCases()),token,username,password,organization,isAdmin,restoring,restoreError,restoreSession,page,error,notice,loading,cases,search,caseQuery,casePage,caseTotal,caseNumber,caseTitle,menu,menuGroups,filteredCases,login,logout,makeCase,searchCases,moveCase}
+return {workbenchFocus,quickCreate,takeWorkbenchFocus,openWorkbenchTask,startWork,geographyFocus,placeFocus,openMap,openPlace,intelligence,persons,api,captureSession:requests.capture,command,run,openCase,can,permissions,roleName,refreshCases:()=>run(()=>loadCases()),token,username,password,organization,isAdmin,restoring,restoreError,restoreSession,page,error,notice,loading,cases,search,caseQuery,casePage,caseTotal,caseNumber,caseTitle,menu,menuGroups,filteredCases,login,logout,makeCase,searchCases,moveCase}
 }
 
 type Workspace = ReturnType<typeof createWorkspace>

@@ -98,3 +98,11 @@ def test_old_migration_name_forwards_to_stable_entry_point(monkeypatch, capsys):
         runpy.run_path(str(path), run_name='__main__')
     assert result.value.code == 7 and calls == ['forwarded']
     assert 'python migrate.py' in capsys.readouterr().err
+
+
+def test_offline_map_settings_forward_without_replacing_process_configuration(tmp_path):
+    (tmp_path/'.env').write_text('WELLSPRING_MAP_TILE_DIR=E:/synthetic tiles\nWELLSPRING_MAP_TILE_CRS=GCJ02\nWELLSPRING_MAP_MAX_ZOOM=16\nWELLSPRING_MAP_CENTER=120.06,31.55\nWELLSPRING_MAP_INITIAL_ZOOM=11\n',encoding='utf-8')
+    result=config.ai_environment({'WELLSPRING_MAP_MAX_ZOOM':'15'},root=tmp_path)
+    assert result['WELLSPRING_MAP_TILE_DIR']=='E:/synthetic tiles'
+    assert result['WELLSPRING_MAP_TILE_CRS']=='GCJ02' and result['WELLSPRING_MAP_MAX_ZOOM']=='15'
+    assert result['WELLSPRING_MAP_CENTER']=='120.06,31.55' and result['WELLSPRING_MAP_INITIAL_ZOOM']=='11'

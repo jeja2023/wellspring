@@ -13,7 +13,7 @@ def intake(client, actor, number="ALARM-1"):
 
 
 def new_body(source, number="CASE-1"):
-    return {"source_version": source["version"], "mode": "NEW", "number": number, "title": "合成案件草稿", "basis": "合成转办依据"}
+    return {"source_version": source["version"], "mode": "NEW", "number": number, "title": "合成案件记录", "basis": "合成转办依据"}
 
 
 def transfer(client, actor, source, body=None, key=None):
