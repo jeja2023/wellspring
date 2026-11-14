@@ -1,0 +1,225 @@
+/* 清源设计系统三层 Design Tokens（默认：清朗浅白；可选：柔雾天蓝、柔和暗夜） */
+:root {
+  /* 1. 排印与尺寸基线 */
+  --ws-font-sans: "Inter", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  --ws-font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+
+  --ws-radius-sm: 6px;
+  --ws-radius-md: 8px;
+  --ws-radius-lg: 10px;
+  --ws-radius-xl: 12px;
+
+  --ws-sidebar-width: 220px;
+  --ws-header-height: 64px;
+  --ws-card-pad: 22px;
+  --ws-cell-pad-y: 11px;
+  --ws-cell-pad-x: 10px;
+  --ws-control-h: 38px;
+  --ws-btn-pad: 8px 15px;
+  --ws-input-pad: 9px 11px;
+
+  /* 2. 表面与画布层级（清朗明亮浅色） */
+  --ws-bg-canvas: #f7faff;
+  --ws-bg-surface: #ffffff;
+  --ws-bg-header: rgba(255, 255, 255, 0.92);
+  --ws-bg-subtle: #f8fbfe;
+  --ws-bg-elevated: #ffffff;
+  --ws-bg-hover: #f1f6fd;
+  --ws-bg-selected: #edf5ff;
+  --ws-bg-login: #f2f7fc;
+  --ws-bg-backdrop: rgba(30, 58, 95, 0.34);
+
+  /* 3. 侧边栏令牌（默认纯白通透侧栏，告别厚重深色压迫感） */
+  --ws-sidebar-bg: #ffffff;
+  --ws-sidebar-surface: #f4f8fd;
+  --ws-sidebar-hover: #f1f6fd;
+  --ws-sidebar-active-bg: #edf5ff;
+  --ws-sidebar-active-bar: #2573db;
+  --ws-sidebar-text: #475569;
+  --ws-sidebar-text-active: #1a5eb8;
+  --ws-sidebar-muted: #6e8097;
+  --ws-sidebar-border: #e6edf6;
+
+  /* 4. 文字层级 */
+  --ws-text-primary: #1e293b;
+  --ws-text-secondary: #475569;
+  --ws-text-muted: #64748b;
+  --ws-text-inverse: #ffffff;
+
+  /* 5. 边框层级（竖向边框柔化同时保留 >0 宽度以兼容全边框校验） */
+  --ws-border-subtle: #edf2f8;
+  --ws-border-default: #dde6f0;
+  --ws-border-strong: #c2d1e2;
+  --ws-border-input: #cfdbe8;
+  --ws-border-grid: rgba(37, 115, 219, 0.06);
+
+  /* 6. 品牌与交互主色（清朗天青蓝 + 翠青碧） */
+  --ws-accent-primary: #2573db;
+  --ws-accent-primary-hover: #1d61bd;
+  --ws-accent-primary-soft: rgba(37, 115, 219, 0.09);
+  --ws-accent-teal: #14a398;
+  --ws-accent-teal-hover: #0e877e;
+  --ws-accent-teal-soft: #eafaf7;
+  --ws-accent-teal-border: #bde9e3;
+  --ws-focus-ring: #93c5fd;
+
+  /* 7. 语义状态色 */
+  --ws-status-neutral-bg: #f1f5f9;
+  --ws-status-neutral-border: #dbe4ee;
+  --ws-status-neutral-text: #475569;
+
+  --ws-status-info-bg: #eff6ff;
+  --ws-status-info-border: #bfdbfe;
+  --ws-status-info-text: #1d64c4;
+
+  --ws-status-success-bg: #ecfdf5;
+  --ws-status-success-border: #a7f3d0;
+  --ws-status-success-text: #0f8a6c;
+
+  --ws-status-warning-bg: #fffbeb;
+  --ws-status-warning-border: #fde68a;
+  --ws-status-warning-text: #b45309;
+
+  --ws-status-danger-bg: #fef2f2;
+  --ws-status-danger-border: #fecaca;
+  --ws-status-danger-text: #c22727;
+
+  /* 8. 阴影与图表 */
+  --ws-shadow-sm: 0 1px 2px rgba(30, 41, 59, 0.04);
+  --ws-shadow-md: 0 10px 26px rgba(30, 41, 59, 0.08);
+  --ws-shadow-dialog: 0 20px 56px rgba(30, 58, 95, 0.14);
+  --ws-shadow-drawer: -10px 0 30px rgba(30, 58, 95, 0.1);
+  --ws-chart-grid: #e8eff6;
+  --ws-bar-track: #edf3f9;
+  --ws-bar-fill: #3b82f6;
+  --ws-series-1: #2573db;
+  --ws-series-2: #0e877e;
+  --ws-series-3: #c26a08;
+  --ws-series-4: #6d28d9;
+  --ws-series-5: #be123c;
+  --ws-series-6: #0369a1;
+  --ws-login-story-bg:
+    radial-gradient(circle at 82% 16%, rgba(37, 115, 219, 0.11), transparent 48%),
+    radial-gradient(circle at 18% 84%, rgba(20, 163, 152, 0.1), transparent 46%),
+    linear-gradient(155deg, #f5f9ff 0%, #ecf3fc 52%, #edf7f5 100%);
+}
+
+/* 柔雾天蓝模式：淡雅天蓝画布与侧栏，层次清晰而不厚重 */
+:root[data-theme="ocean"] {
+  --ws-bg-canvas: #eef5fc;
+  --ws-bg-surface: #ffffff;
+  --ws-bg-header: rgba(246, 250, 255, 0.92);
+  --ws-bg-subtle: #f3f8fe;
+  --ws-bg-hover: #e7f1fc;
+  --ws-bg-selected: #deedff;
+  --ws-bg-login: #ebf3fc;
+
+  --ws-sidebar-bg: #e5f0fc;
+  --ws-sidebar-surface: #d7e7fa;
+  --ws-sidebar-hover: #dceafa;
+  --ws-sidebar-active-bg: #ffffff;
+  --ws-sidebar-active-bar: #256fd6;
+  --ws-sidebar-text: #2c4666;
+  --ws-sidebar-text-active: #1654ad;
+  --ws-sidebar-muted: #526e8c;
+  --ws-sidebar-border: #cfe0f4;
+
+  --ws-border-subtle: #e2edf8;
+  --ws-border-default: #cddff2;
+  --ws-border-strong: #acc6e4;
+  --ws-border-input: #bed3ec;
+  --ws-border-grid: rgba(37, 111, 214, 0.07);
+
+  --ws-accent-primary: #256fd6;
+  --ws-accent-primary-hover: #1b5ab5;
+  --ws-accent-primary-soft: rgba(37, 111, 214, 0.1);
+}
+
+/* 柔和暗夜模式（强化层深、文字与按钮 WCAG 对比度，适用于夜间值班研判与数据大屏） */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ws-bg-canvas: #0f1726;
+  --ws-bg-surface: #172338;
+  --ws-bg-header: rgba(21, 32, 51, 0.9);
+  --ws-bg-subtle: #1d2c45;
+  --ws-bg-elevated: #20314c;
+  --ws-bg-hover: #253856;
+  --ws-bg-selected: #1b3c53;
+  --ws-bg-login: #0f1726;
+  --ws-bg-backdrop: rgba(6, 11, 22, 0.72);
+
+  --ws-sidebar-bg: #131e30;
+  --ws-sidebar-surface: rgba(148, 179, 204, 0.12);
+  --ws-sidebar-hover: rgba(148, 179, 204, 0.16);
+  --ws-sidebar-active-bg: rgba(96, 165, 250, 0.2);
+  --ws-sidebar-active-bar: #60a5fa;
+  --ws-sidebar-text: #cbd5e1;
+  --ws-sidebar-text-active: #ffffff;
+  --ws-sidebar-muted: #94a8c0;
+  --ws-sidebar-border: rgba(148, 179, 204, 0.18);
+
+  --ws-text-primary: #f1f5f9;
+  --ws-text-secondary: #cbd5e1;
+  --ws-text-muted: #98abc2;
+  --ws-text-inverse: #ffffff;
+
+  --ws-border-subtle: rgba(148, 179, 204, 0.16);
+  --ws-border-default: rgba(148, 179, 204, 0.26);
+  --ws-border-strong: rgba(148, 179, 204, 0.42);
+  --ws-border-input: rgba(148, 179, 204, 0.34);
+  --ws-border-grid: rgba(148, 179, 204, 0.11);
+
+  --ws-accent-primary: #2563eb;
+  --ws-accent-primary-hover: #3b82f6;
+  --ws-accent-primary-soft: rgba(59, 130, 246, 0.18);
+  --ws-accent-teal: #2dd4bf;
+  --ws-accent-teal-hover: #5eead4;
+  --ws-accent-teal-soft: rgba(45, 212, 191, 0.16);
+  --ws-accent-teal-border: rgba(45, 212, 191, 0.36);
+  --ws-focus-ring: #60a5fa;
+
+  --ws-status-neutral-bg: rgba(148, 163, 184, 0.16);
+  --ws-status-neutral-border: rgba(148, 163, 184, 0.28);
+  --ws-status-neutral-text: #cbd5e1;
+
+  --ws-status-info-bg: rgba(96, 165, 250, 0.16);
+  --ws-status-info-border: rgba(96, 165, 250, 0.32);
+  --ws-status-info-text: #60a5fa;
+
+  --ws-status-success-bg: rgba(45, 212, 191, 0.16);
+  --ws-status-success-border: rgba(45, 212, 191, 0.32);
+  --ws-status-success-text: #2dd4bf;
+
+  --ws-status-warning-bg: rgba(245, 158, 11, 0.16);
+  --ws-status-warning-border: rgba(245, 158, 11, 0.34);
+  --ws-status-warning-text: #fbbf24;
+
+  --ws-status-danger-bg: rgba(239, 68, 68, 0.16);
+  --ws-status-danger-border: rgba(239, 68, 68, 0.34);
+  --ws-status-danger-text: #f87171;
+
+  --ws-shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.26);
+  --ws-shadow-md: 0 12px 32px rgba(0, 0, 0, 0.38);
+  --ws-shadow-dialog: 0 24px 64px rgba(0, 0, 0, 0.52);
+  --ws-shadow-drawer: -14px 0 36px rgba(0, 0, 0, 0.44);
+  --ws-chart-grid: rgba(148, 179, 204, 0.16);
+  --ws-bar-track: rgba(148, 179, 204, 0.15);
+  --ws-bar-fill: #60a5fa;
+  --ws-series-1: #60a5fa;
+  --ws-series-2: #2dd4bf;
+  --ws-series-3: #fbbf24;
+  --ws-series-4: #a78bfa;
+  --ws-series-5: #fb7185;
+  --ws-series-6: #38bdf8;
+  --ws-login-story-bg:
+    radial-gradient(circle at 18% 18%, rgba(59, 130, 246, 0.2), transparent 52%),
+    radial-gradient(circle at 84% 82%, rgba(45, 212, 191, 0.14), transparent 48%),
+    linear-gradient(155deg, #111c2e 0%, #15243b 55%, #12283a 100%);
+}
+
+/* 桌面端侧边栏收起态 */
+@media (min-width: 801px) {
+  :root[data-sidebar="rail"] {
+    --ws-sidebar-width: 68px;
+  }
+}

@@ -1,3 +1,150 @@
-.persons-page{display:grid;gap:20px}.person-tabs{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 20px}.persons-page>.person-tabs{margin:0}.person-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px}.person-hint{font-size:12px;line-height:1.8}.person-fields{border:0;padding:0;margin:0;min-width:0}.persons-page .system-search select{margin-bottom:0}.persons-page table th,.persons-page table td{white-space:nowrap}.person-detail{min-width:0}.person-overview{display:flex;gap:12px 24px;flex-wrap:wrap;align-items:center;margin-bottom:24px}.person-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin:0 0 24px}.person-facts dt{font-size:12px;color:#61778b;margin-bottom:8px}.person-facts dd{margin:0;overflow-wrap:anywhere;line-height:1.8}.person-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.8}.person-overdue{color:#b42318;font-size:12px}.person-json{white-space:pre-wrap;overflow-wrap:anywhere;background:#f7f9fb;border:1px solid #d8e1ea;border-radius:6px;padding:14px;line-height:1.8;font-size:12px;max-height:400px;overflow:auto}.persons-page td.person-history-note{white-space:normal;min-width:240px;max-width:700px}.person-detail>.person-tabs{margin-bottom:24px}@media(max-width:800px){.person-form-grid{grid-template-columns:minmax(0,1fr)}.person-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.person-detail .actions{flex-wrap:wrap}}
+.persons-page {
+  display: grid;
+  gap: 20px;
+}
 
-.person-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px 20px;flex-wrap:wrap}.person-header .person-tabs{margin:0}.person-header>button{margin-left:auto;flex-shrink:0}.person-search{display:flex;align-items:flex-end;gap:12px;margin-bottom:20px;flex-wrap:wrap}.person-search label{flex:0 1 320px;max-width:100%;min-width:160px}.person-search input{margin:8px 0 0}.person-search button{flex-shrink:0}
+.persons-page > .person-tabs {
+  margin: 0;
+}
+
+.person-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 24px;
+}
+
+.person-hint {
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.person-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.persons-page .system-search select {
+  margin-bottom: 0;
+}
+
+.persons-page table th,
+.persons-page table td {
+  white-space: nowrap;
+}
+
+.person-detail {
+  min-width: 0;
+}
+
+.person-overview {
+  display: flex;
+  gap: 12px 24px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.person-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  margin: 0 0 24px;
+}
+
+.person-facts dt {
+  font-size: 12px;
+  color: var(--ws-text-muted);
+  margin-bottom: 8px;
+}
+
+.person-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.8;
+}
+
+.person-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.8;
+}
+
+.person-overdue {
+  color: var(--ws-status-danger-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.person-json {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--ws-bg-subtle);
+  color: var(--ws-text-primary);
+  border: 1px solid var(--ws-border-default);
+  border-radius: var(--ws-radius-sm);
+  padding: 14px;
+  line-height: 1.8;
+  font-size: 12px;
+  font-family: var(--ws-font-mono);
+  max-height: 400px;
+  overflow: auto;
+}
+
+.persons-page td.person-history-note {
+  white-space: normal;
+  min-width: 240px;
+  max-width: 700px;
+}
+
+@media (max-width: 800px) {
+  .person-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .person-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .person-detail .actions {
+    flex-wrap: wrap;
+  }
+}
+
+.person-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 20px;
+  flex-wrap: wrap;
+}
+
+.person-header .person-tabs {
+  margin: 0;
+}
+
+.person-header > button {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.person-search {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.person-search label {
+  flex: 0 1 320px;
+  max-width: 100%;
+  min-width: 160px;
+}
+
+.person-search input {
+  margin: 8px 0 0;
+}
+
+.person-search button {
+  flex-shrink: 0;
+}

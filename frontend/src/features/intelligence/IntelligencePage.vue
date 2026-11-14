@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import Pagination from '../../shared/components/Pagination.vue'
 import FormDialog from '../../shared/components/FormDialog.vue'
+import StatusBadge from '../../shared/components/StatusBadge.vue'
 import DeliveryWorkspace from './DeliveryWorkspace.vue'
 import DispatchDialog from './DispatchDialog.vue'
 import ClueImportPanel from './ClueImportPanel.vue'
@@ -32,7 +33,7 @@ async function submitCreate(){if(await create())creating.value=false}
       <form class="clue-search" @submit.prevent="searchClues"><label class="clue-search-keyword">标题或来源<input v-model="searchInput" maxlength="100" placeholder="输入标题或来源"></label><label class="clue-search-status">核验状态<select v-model="statusInput"><option value="">全部状态</option><option value="DRAFT">待核验</option><option value="REVIEWED">已核验（开发验证）</option></select></label><div class="clue-search-actions"><button :disabled="loading">查询</button><button type="button" class="secondary" :disabled="loading" @click="resetClueSearch">重置</button></div></form>
       <p class="muted">仅在当前组织中按标题或来源筛选；摘要不参与搜索。</p>
       <div class="table-wrap"><table><thead><tr><th scope="col" class="row-number">序号</th><th>线索编号</th><th>标题</th><th>来源</th><th>重要程度</th><th>状态</th><th>操作</th></tr></thead>
-        <tbody><tr v-for="(clue, rowIndex) in clues" :key="clue.id"><td class="row-number">{{(page-1)*20+rowIndex+1}}</td><td>{{clue.reference_no||'历史线索'}}</td><td>{{clue.title}}</td><td>{{clue.source}}</td><td>{{clue.priority==='IMPORTANT'?'重要':'普通'}}</td><td>{{clueStatus[clue.status] || '未知状态'}}</td><td><button class="link" :disabled="loading" @click="show(clue.id)">查看</button></td></tr></tbody></table>
+        <tbody><tr v-for="(clue, rowIndex) in clues" :key="clue.id"><td class="row-number">{{(page-1)*20+rowIndex+1}}</td><td>{{clue.reference_no||'历史线索'}}</td><td>{{clue.title}}</td><td>{{clue.source}}</td><td><StatusBadge :tone="clue.priority==='IMPORTANT'?'warning':'neutral'">{{clue.priority==='IMPORTANT'?'重要':'普通'}}</StatusBadge></td><td><StatusBadge :tone="clue.status==='REVIEWED'?'success':'info'">{{clueStatus[clue.status] || '未知状态'}}</StatusBadge></td><td><button class="link" :disabled="loading" @click="show(clue.id)">查看</button></td></tr></tbody></table>
         <p v-if="!clues.length" class="empty">{{appliedSearch || appliedStatus ? '没有符合条件的线索' : '暂无线索'}}</p></div>
       <Pagination :page="page" :total="total" :loading="loading" @change="nextPage($event-page)" />
       <div v-if="selected" class="detail">

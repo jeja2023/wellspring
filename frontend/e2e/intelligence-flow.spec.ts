@@ -2,7 +2,7 @@ import {test,expect,type Page} from '@playwright/test'
 import ExcelJS from 'exceljs'
 
 async function login(page:Page,username:string){await page.goto('/');await page.getByLabel('账号',{exact:true}).fill(username);await page.getByLabel('密码',{exact:true}).fill('synthetic-test-password');await page.getByRole('button',{name:'登录系统'}).click();await page.getByRole('navigation',{name:'主导航'}).waitFor()}
-async function logout(page:Page){await page.getByRole('button',{name:'退出',exact:true}).click()}
+async function logout(page:Page){await page.getByRole('button',{name:'当前账号菜单',exact:true}).click();await page.getByRole('button',{name:'退出',exact:true}).click()}
 async function received(page:Page,title:string){await page.getByRole('navigation',{name:'主导航'}).getByRole('button',{name:'情报线索',exact:true}).click();await page.getByRole('button',{name:'收到的线索',exact:true}).click();await page.locator('.intelligence-flow tbody tr').filter({hasText:title}).getByRole('button',{name:'查看办理',exact:true}).click()}
 
 test('Excel录入、支队下发大队、派出所处置反馈及逐级复核办结',async({page},testInfo)=>{

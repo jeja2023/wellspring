@@ -67,6 +67,7 @@ test('大屏统计、周期、全屏与 AI 模型连接、生成研判结果和�
   await expect(page.locator('.screen-metric')).toHaveCount(6)
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
   await page.screenshot({path:testInfo.outputPath('data-screen-768.png'),fullPage:true})
+  await page.getByRole('button',{name:'当前账号菜单',exact:true}).click()
   await page.getByRole('button',{name:'退出',exact:true}).click()
   await page.getByLabel('账号',{exact:true}).fill('outsider')
   await page.getByLabel('密码',{exact:true}).fill('synthetic-test-password')

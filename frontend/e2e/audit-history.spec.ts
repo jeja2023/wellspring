@@ -11,7 +11,7 @@ test('中文操作记录筛选、日期对象查询和两页15条分页',async({
     const response=await fetch('/api/system/users',{method:'POST',headers,body:JSON.stringify({username:user,password:'synthetic-test-password',org_id:identity.organization_id,role_id:'wellspring-business-user'})})
     if(!response.ok)throw Error(await response.text())
   },user)
-  await page.getByRole('button',{name:'退出',exact:true}).click();await login(page,user)
+  await page.getByRole('button',{name:'当前账号菜单',exact:true}).click();await page.getByRole('button',{name:'退出',exact:true}).click();await login(page,user)
   const target=await page.evaluate(async()=>{
     const headers={Authorization:'Bearer '+sessionStorage.getItem('wellspring.session'),'Content-Type':'application/json'},ids:string[]=[]
     for(let index=0;index<24;index++){
@@ -31,7 +31,7 @@ test('中文操作记录筛选、日期对象查询和两页15条分页',async({
   await page.getByLabel('对象标识',{exact:true}).fill(target);await page.getByRole('button',{name:'查询',exact:true}).click();await expect(own.locator('tbody tr')).toHaveCount(1);await expect(own.locator('tbody')).toContainText(target);await expect(own.locator('tbody tr').first().locator('td').first()).toHaveText('1')
   await page.getByRole('button',{name:'重置',exact:true}).click();await expect(page.getByLabel('操作内容',{exact:true})).toHaveValue('');await expect(page.getByLabel('开始日期',{exact:true})).toHaveValue('');await expect(own.locator('tbody tr')).toHaveCount(15)
   await page.screenshot({path:testInfo.outputPath('personal-history-chinese-filters.png'),fullPage:true})
-  await page.getByRole('button',{name:'退出',exact:true}).click();await login(page,'superadmin');await page.getByRole('navigation',{name:'主导航'}).getByRole('button',{name:'系统日志',exact:true}).click()
+  await page.getByRole('button',{name:'当前账号菜单',exact:true}).click();await page.getByRole('button',{name:'退出',exact:true}).click();await login(page,'superadmin');await page.getByRole('navigation',{name:'主导航'}).getByRole('button',{name:'系统日志',exact:true}).click()
   const system=page.getByRole('table',{name:'系统日志记录',exact:true});await page.getByLabel('操作账号',{exact:true}).fill(user);await page.getByLabel('操作内容',{exact:true}).fill('创建案件记录');await page.getByRole('button',{name:'查询',exact:true}).click()
   await expect(system.locator('tbody tr')).toHaveCount(15);await expect(page.locator('.pagination-size')).toHaveText('每页 15 条');await expect(system.locator('tbody')).not.toContainText('CASE_CREATE');await expect(system.getByRole('columnheader',{name:/北京时间|操作代码/})).toHaveCount(0)
   await page.getByRole('button',{name:'下一页',exact:true}).click();await expect(system.locator('tbody tr')).toHaveCount(9);await expect(system.locator('tbody tr').first().locator('td').first()).toHaveText('16')

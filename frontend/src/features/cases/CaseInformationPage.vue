@@ -8,6 +8,7 @@ import { fields, type Field, type CaseInformation, createWorkbook } from './spre
 import { parseWorkbookInWorker } from './spreadsheetClient'
 import { loadCaseInformation, toCaseInformationUpdate } from './caseInformation'
 import IntakeCaseDialog from './IntakeCaseDialog.vue'
+import ConfirmDialog from '../../shared/components/ConfirmDialog.vue'
 
 const { can, api, command, isAdmin, captureSession, openCase } = useWorkspace()
 const pageRequests = createLatestRequests(api)
@@ -64,15 +65,33 @@ async function loadDeleted(target = 1) {
   finally { deletedLoading.value = false }
 }
 async function openDeleted() { deletedDialog.value?.showModal(); await loadDeleted() }
-async function restoreRecord(record: DeletedRecord) {
-  if (!window.confirm(`确定恢复接警编号“${record.number}”的记录吗？`)) return
-  deletedLoading.value = true; deletedError.value = ''
-  try {
-    await command(`case-information-restore-${record.id}`, `/case-information/admin/${record.id}/restore`, {version:record.version})
-    await loadDeleted(deletedPage.value > 1 && deletedItems.value.length === 1 ? deletedPage.value - 1 : deletedPage.value)
-    await load(1, appliedFilters.value, true)
-  } catch (error) { if (isCancelled(error)) return; deletedError.value = error instanceof Error ? error.message : '恢复失败' }
-  finally { deletedLoading.value = false }
+const pendingConfirm = ref<{ title: string; message: string; confirmText: string; danger: boolean; run: () => Promise<void> } | null>(null)
+const confirmBusy = ref(false)
+const confirmError = ref('')
+async function executeConfirm() {
+  if (!pendingConfirm.value) return
+  confirmBusy.value = true; confirmError.value = ''
+  try { await pendingConfirm.value.run(); pendingConfirm.value = null }
+  catch (error) { confirmError.value = error instanceof Error ? error.message : '操作失败' }
+  finally { confirmBusy.value = false }
+}
+function restoreRecord(record: DeletedRecord) {
+  confirmError.value = ''
+  pendingConfirm.value = {
+    title: '恢复已隐藏记录',
+    message: `确定恢复接警编号“${record.number}”的记录吗？`,
+    confirmText: '确认恢复',
+    danger: false,
+    run: async () => {
+      deletedLoading.value = true; deletedError.value = ''
+      try {
+        await command(`case-information-restore-${record.id}`, `/case-information/admin/${record.id}/restore`, {version:record.version})
+        await loadDeleted(deletedPage.value > 1 && deletedItems.value.length === 1 ? deletedPage.value - 1 : deletedPage.value)
+        await load(1, appliedFilters.value, true)
+      } catch (error) { if (isCancelled(error)) return; deletedError.value = error instanceof Error ? error.message : '恢复失败'; throw error }
+      finally { deletedLoading.value = false }
+    },
+  }
 }
 const longFields: readonly Field[] = ['报警内容', '处警补充结果', '简要警情及处理结果', '备注']
 
@@ -149,15 +168,23 @@ async function saveDetails() {
   } catch (error) { if (isCancelled(error)) return; spreadsheetError.value = error instanceof Error ? error.message : '保存失败' }
   finally { spreadsheetBusy.value = false }
 }
-async function deleteRecord(record: CaseInformation) {
-  if (!window.confirm(`确定隐藏接警记录“${display(record['接警编号'])}”吗？原记录会保留，案件及来源关联不受影响。`)) return
-  spreadsheetBusy.value = true; spreadsheetError.value = ''; spreadsheetNotice.value = ''
-  try {
-    await command(`case-information-delete-${record.id}`, `/case-information/${record.id}/delete`, { version: record.version })
-    spreadsheetNotice.value = '记录已隐藏。'
-    await load(page.value > 1 && records.value.length === 1 ? page.value - 1 : page.value, appliedFilters.value, true)
-  } catch (error) { if (isCancelled(error)) return; spreadsheetError.value = error instanceof Error ? error.message : '删除失败' }
-  finally { spreadsheetBusy.value = false }
+function deleteRecord(record: CaseInformation) {
+  confirmError.value = ''
+  pendingConfirm.value = {
+    title: '隐藏接警记录',
+    message: `确定隐藏接警记录“${display(record['接警编号'])}”吗？原记录会保留，案件及来源关联不受影响。`,
+    confirmText: '确认隐藏',
+    danger: true,
+    run: async () => {
+      spreadsheetBusy.value = true; spreadsheetError.value = ''; spreadsheetNotice.value = ''
+      try {
+        await command(`case-information-delete-${record.id}`, `/case-information/${record.id}/delete`, { version: record.version })
+        spreadsheetNotice.value = '记录已隐藏。'
+        await load(page.value > 1 && records.value.length === 1 ? page.value - 1 : page.value, appliedFilters.value, true)
+      } catch (error) { if (isCancelled(error)) return; spreadsheetError.value = error instanceof Error ? error.message : '删除失败'; throw error }
+      finally { spreadsheetBusy.value = false }
+    },
+  }
 }
 </script>
 
@@ -245,5 +272,16 @@ async function deleteRecord(record: CaseInformation) {
       </template>
     </dialog>
     <IntakeCaseDialog v-if="transferId" :key="transferId" :intake-id="transferId" @close="transferId=''" @saved="load(page,appliedFilters,true)" />
+    <ConfirmDialog
+      :open="!!pendingConfirm"
+      :title="pendingConfirm?.title || '确认操作'"
+      :message="pendingConfirm?.message || ''"
+      :confirm-text="pendingConfirm?.confirmText"
+      :danger="pendingConfirm?.danger"
+      :busy="confirmBusy"
+      :error="confirmError"
+      @close="pendingConfirm = null"
+      @confirm="executeConfirm"
+    />
   </section>
 </template>

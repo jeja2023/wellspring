@@ -47,7 +47,7 @@ test('系统管理配置、权限生效、重置密码及导入入口归位',asy
  await page.getByRole('button',{name:'新建导入批次',exact:true}).click()
  await expect(page.getByRole('dialog',{name:'暂存 CSV',exact:true})).toBeVisible()
  await page.getByRole('dialog',{name:'暂存 CSV',exact:true}).getByRole('button',{name:/^关闭/}).click()
- await page.getByRole('button',{name:'退出',exact:true}).click()
+ await page.getByRole('button',{name:'当前账号菜单',exact:true}).click();await page.getByRole('button',{name:'退出',exact:true}).click()
  await login(page,user,'reader-reset-password')
  await expect(nav.getByRole('button',{name:'案件管理',exact:true})).toBeVisible()
  for(const name of ['用户管理','角色管理','权限管理','组织管理','污水监测','接警信息'])await expect(nav.getByRole('button',{name,exact:true})).toHaveCount(0)

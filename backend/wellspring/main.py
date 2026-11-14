@@ -28,7 +28,7 @@ from .access_policy import identity_json
 from .audit_actions import action_condition, action_name
 from .security import DUMMY_PASSWORD_HASH, PASSWORD_MAX_LENGTH, USERNAME_MAX_LENGTH, current_admin, current_user, new_token, token_hash, verify_password
 
-app = FastAPI(title="清源开发验证 API", version="0.0.7")
+app = FastAPI(title="清源开发验证 API", version="0.0.8")
 app.add_middleware(RequestBudgetMiddleware)
 
 class Login(BaseModel):

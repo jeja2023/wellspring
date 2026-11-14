@@ -1,11 +1,180 @@
-.intelligence-tabs{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 20px}.intelligence-flow{display:grid;gap:20px}.intelligence-flow .system-search select{margin-bottom:0}.intelligence-flow .system-search .check-label{margin:0 0 10px}.intelligence-flow table th,.intelligence-flow table td{white-space:nowrap}.flow-overdue{margin-left:6px;color:#b42318;font-size:12px}.flow-stages{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}.flow-stages span{background:#e9f3f2;color:#0e7770;padding:7px 12px;border-radius:4px;font-size:12px}.flow-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:0 0 24px}.flow-overview>div{display:flex;flex-direction:column;gap:7px}.flow-overview dt{color:#61778b;font-size:12px}.flow-overview dd{margin:0}.flow-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.8}.flow-timeline{list-style:none;margin:16px 0 0;padding:0}.flow-timeline li{border-left:2px solid #d8e5ea;margin-left:5px;padding:0 0 20px 18px}.flow-timeline strong{display:block}.flow-timeline small{display:block;margin-top:7px}.flow-timeline p{margin:10px 0 0}.flow-import-preview{max-height:360px;overflow:auto;margin:20px 0}
-@media(max-width:800px){.flow-overview{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.intelligence-flow {
+  display: grid;
+  gap: 20px;
+}
 
-.flow-import-panel input[hidden]{display:none}
+.intelligence-flow .system-search select {
+  margin-bottom: 0;
+}
 
-.flow-fields{border:0;padding:0;margin:0;min-width:0}
+.intelligence-flow .system-search .check-label {
+  margin: 0 0 10px;
+}
 
-.flow-stages .is-current{background:#153b5b;color:white;font-weight:600}
+.intelligence-flow table th,
+.intelligence-flow table td {
+  white-space: nowrap;
+}
 
-.intelligence-header{display:flex;align-items:center;justify-content:space-between;gap:12px 20px;flex-wrap:wrap;margin-bottom:20px}.intelligence-header .intelligence-tabs{margin:0}.intelligence-header>button{margin-left:auto;flex-shrink:0}.clue-search{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}.clue-search-keyword{flex:0 1 320px;max-width:100%;min-width:200px}.clue-search-status{width:180px}.clue-search input,.clue-search select{margin:8px 0 0}.clue-search-actions{display:flex;gap:10px;flex:none}
-@media(max-width:800px){.clue-search-keyword{flex-basis:100%;min-width:0}.clue-search-status{flex:1;min-width:140px}}
+.flow-overdue {
+  margin-left: 6px;
+  color: var(--ws-status-danger-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.flow-stages {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.flow-stages span {
+  background: var(--ws-accent-teal-soft);
+  color: var(--ws-accent-teal);
+  border: 1px solid var(--ws-accent-teal-border);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.flow-stages .is-current {
+  background: var(--ws-accent-primary);
+  color: var(--ws-text-inverse);
+  border-color: transparent;
+}
+
+.flow-overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0 0 24px;
+}
+
+.flow-overview > div {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.flow-overview dt {
+  color: var(--ws-text-muted);
+  font-size: 12px;
+}
+
+.flow-overview dd {
+  margin: 0;
+}
+
+.flow-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.8;
+}
+
+.flow-timeline {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+}
+
+.flow-timeline li {
+  border-left: 2px solid var(--ws-border-default);
+  margin-left: 5px;
+  padding: 0 0 20px 18px;
+}
+
+.flow-timeline strong {
+  display: block;
+}
+
+.flow-timeline small {
+  display: block;
+  margin-top: 7px;
+}
+
+.flow-timeline p {
+  margin: 10px 0 0;
+}
+
+.flow-import-preview {
+  max-height: 360px;
+  overflow: auto;
+  margin: 20px 0;
+}
+
+@media (max-width: 800px) {
+  .flow-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.flow-import-panel input[hidden] {
+  display: none;
+}
+
+.flow-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.intelligence-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.intelligence-header .intelligence-tabs {
+  margin: 0;
+}
+
+.intelligence-header > button {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.clue-search {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.clue-search-keyword {
+  flex: 0 1 320px;
+  max-width: 100%;
+  min-width: 200px;
+}
+
+.clue-search-status {
+  width: 180px;
+}
+
+.clue-search input,
+.clue-search select {
+  margin: 8px 0 0;
+}
+
+.clue-search-actions {
+  display: flex;
+  gap: 10px;
+  flex: none;
+}
+
+@media (max-width: 800px) {
+  .clue-search-keyword {
+    flex-basis: 100%;
+    min-width: 0;
+  }
+  .clue-search-status {
+    flex: 1;
+    min-width: 140px;
+  }
+}

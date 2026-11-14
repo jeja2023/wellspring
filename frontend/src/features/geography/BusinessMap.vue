@@ -25,10 +25,14 @@ function coverage(){
 }
 function grid(canvas:HTMLCanvasElement,coords:L.Coords){
   const ctx=canvas.getContext('2d');if(!ctx)return
-  ctx.fillStyle='#eef4f5';ctx.fillRect(0,0,256,256);ctx.strokeStyle='#d8e4e8';ctx.lineWidth=1
+  const styles=getComputedStyle(document.documentElement)
+  const bg=styles.getPropertyValue('--ws-bg-subtle').trim()||'#f8fbfe'
+  const stroke=styles.getPropertyValue('--ws-border-default').trim()||'#dce5ef'
+  const text=styles.getPropertyValue('--ws-text-muted').trim()||'#64748b'
+  ctx.fillStyle=bg;ctx.fillRect(0,0,256,256);ctx.strokeStyle=stroke;ctx.lineWidth=1
   for(let i=0;i<=256;i+=64){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,256);ctx.moveTo(0,i);ctx.lineTo(256,i);ctx.stroke()}
   const corner=L.CRS.EPSG3857.pointToLatLng(L.point(coords.x*256,coords.y*256),coords.z)
-  ctx.fillStyle='#718997';ctx.font='11px sans-serif';ctx.fillText(`${corner.lng.toFixed(3)}°, ${corner.lat.toFixed(3)}°`,8,18)
+  ctx.fillStyle=text;ctx.font='11px sans-serif';ctx.fillText(`${corner.lng.toFixed(3)}°, ${corner.lat.toFixed(3)}°`,8,18)
 }
 function redraw(){
   if(!map||!markers)return;markers.clearLayers()
