@@ -68,7 +68,7 @@ def verify(root, expected_manifest_sha, loaded=False):
         raise ValueError("不支持的清单格式或版本")
     if set(manifest["files"]) != EXPECTED:
         raise ValueError("清单文件列表异常")
-    expected_images = {f"wellspring/app:{manifest['version']}", "wellspring/postgres:17-offline"}
+    expected_images = {f"wellspring/app:{manifest['version']}", "wellspring/postgres:18-offline"}
     if set(manifest["images"]) != expected_images:
         raise ValueError("镜像清单异常")
     for name, expected in manifest["files"].items():

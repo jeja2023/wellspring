@@ -80,9 +80,9 @@ def main():
     if f"{pg_metadata['Os']}/{pg_metadata['Architecture']}" != args.platform:
         raise SystemExit("PostgreSQL 镜像平台与目标不一致")
     pg_version = docker("run", "--rm", "--network", "none", "--entrypoint", "postgres", args.postgres, "--version")
-    if not re.search(r"\b17\.", pg_version):
-        raise SystemExit("此部署包只支持 PostgreSQL 17")
-    app, db = f"wellspring/app:{version}", "wellspring/postgres:17-offline"
+    if not re.search(r"\b18\.", pg_version):
+        raise SystemExit("此部署包只支持 PostgreSQL 18")
+    app, db = f"wellspring/app:{version}", "wellspring/postgres:18-offline"
     source_hash = hashlib.sha256()
     with tempfile.TemporaryDirectory(prefix="wellspring-build-") as temporary:
         staging = Path(temporary)

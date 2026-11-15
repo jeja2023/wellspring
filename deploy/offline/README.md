@@ -1,6 +1,6 @@
 # 清源单节点离线部署候选方案
 
-当前用于隔离环境、单节点 Docker Compose + PostgreSQL 17 的虚构数据验证。正式业务仍需完成角色权限、网络传输保护、审计归集及目标环境验收。Windows 命令见 [Windows 离线部署步骤](WINDOWS.md)。
+当前用于隔离环境、单节点 Docker Compose + PostgreSQL 18 的虚构数据验证。正式业务仍需完成角色权限、网络传输保护、审计归集及目标环境验收。Windows 命令见 [Windows 离线部署步骤](WINDOWS.md)。
 
 当前源码产品版本为 `0.0.8`，Compose 与环境示例默认引用 `wellspring/app:0.0.8`；修改标签不会更新已经构建或运行的镜像，须重新制作并核验镜像包。数据库 head 为 `0028`，升级与本次验证见 [0.0.8 版本说明](../../docs/0.0.8-版本说明.md)。
 
@@ -14,7 +14,7 @@
 
 ## 1. 联网构建机制作镜像包
 
-审核并固定 Python 3.12、Node 和 PostgreSQL **17** 镜像完整摘要，提前获取与目标平台一致的 PostgreSQL 镜像。数据库镜像须包含 Bash 及官方 `/usr/local/bin/docker-entrypoint.sh`。以下摘要是占位符：
+审核并固定 Python 3.12、Node 和 PostgreSQL **18** 镜像完整摘要，提前获取与目标平台一致的 PostgreSQL 镜像。数据库镜像须包含 Bash 及官方 `/usr/local/bin/docker-entrypoint.sh`。以下摘要是占位符：
 
 ```sh
 python deploy/offline/make_bundle.py \
@@ -89,7 +89,7 @@ python3 -I backup_restore.py backup --env-file "$CFG" \
 python3 -I backup_restore.py drill \
   --dump /secure-backup/wellspring-2026-11-11.dump \
   --sha256 '<核对备份摘要文件中的64位值>' \
-  --postgres-image wellspring/postgres:17-offline \
+  --postgres-image wellspring/postgres:18-offline \
   --report /secure-backup/restore-drill-2026-11-11.json
 ```
 

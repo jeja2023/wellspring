@@ -49,8 +49,8 @@ def backup(env_file, output):
         raise ValueError("备份或摘要文件已存在，不覆盖")
     prefix = ["docker", "compose", "--env-file", str(env_file.resolve(strict=True)), "-f", str(HERE / "compose.yaml"), "exec", "-T", "db"]
     version = run([*prefix, "psql", "-X", "-A", "-t", "-U", "wellspring_owner", "-d", "wellspring", "-c", "SHOW server_version_num"], capture_output=True, text=True).stdout.strip()
-    if not version.isdecimal() or int(version) // 10000 != 17:
-        raise ValueError("备份工具只支持本部署方案的 PostgreSQL 17")
+    if not version.isdecimal() or int(version) // 10000 != 18:
+        raise ValueError("备份工具只支持本部署方案的 PostgreSQL 18")
     command = [*prefix, "pg_dump", "-U", "wellspring_owner", "-Fc", "wellspring"]
     temporary = output.with_name(output.name + "." + uuid4().hex + ".partial")
     temporary_digest = temporary.with_suffix(".sha256.partial")
@@ -93,8 +93,8 @@ def drill(dump, image, expected_sha, report):
     if metadata.get("Os") != "linux" or metadata.get("Architecture") not in {"amd64", "arm64"}:
         raise ValueError("恢复演练需要已审核的 Linux amd64/arm64 镜像")
     version = run(["docker", "run", "--rm", "--pull", "never", "--network", "none", "--entrypoint", "postgres", image, "--version"], capture_output=True, text=True).stdout
-    if not re.search(r"\b17\.", version):
-        raise ValueError("恢复演练只支持 PostgreSQL 17 镜像")
+    if not re.search(r"\b18\.", version):
+        raise ValueError("恢复演练只支持 PostgreSQL 18 镜像")
     name = "wellspring-restore-drill-" + uuid4().hex
     started = time.monotonic()
     created = False

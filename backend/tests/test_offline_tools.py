@@ -29,7 +29,7 @@ def bundle(tmp_path):
         (folder / name).write_bytes(b"synthetic fixture\n")
     (folder / "verify_bundle.py").write_bytes((DEPLOY / "verify_bundle.py").read_bytes())
     manifest = {"schema_version": 2, "version": "0.0.4",
-                "images": {"wellspring/app:0.0.4": "sha256:" + "1" * 64, "wellspring/postgres:17-offline": "sha256:" + "2" * 64},
+                "images": {"wellspring/app:0.0.4": "sha256:" + "1" * 64, "wellspring/postgres:18-offline": "sha256:" + "2" * 64},
                 "files": {name: verifier.sha(folder / name) for name in verifier.EXPECTED}}
     (folder / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     return folder, verifier.sha(folder / "manifest.json")
@@ -148,7 +148,7 @@ def test_failed_backup_leaves_no_final_or_partial_dump(tmp_path, monkeypatch):
     output = tmp_path / "backup.dump"
     def fake_run(command, **kwargs):
         if "psql" in command:
-            return subprocess.CompletedProcess(command, 0, stdout="170002\n")
+            return subprocess.CompletedProcess(command, 0, stdout="180002\n")
         kwargs["stdout"].write(b"partial dump")
         raise subprocess.CalledProcessError(1, command)
     monkeypatch.setattr(backup, "run", fake_run)
@@ -166,7 +166,7 @@ def test_completed_backup_publishes_matching_digest_without_overwrite(tmp_path, 
     output = tmp_path / "backup.dump"
     def fake_run(command, **kwargs):
         if "psql" in command:
-            return subprocess.CompletedProcess(command, 0, stdout="170002\n")
+            return subprocess.CompletedProcess(command, 0, stdout="180002\n")
         kwargs["stdout"].write(b"complete dump")
         return subprocess.CompletedProcess(command, 0)
     monkeypatch.setattr(backup, "run", fake_run)

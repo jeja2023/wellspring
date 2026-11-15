@@ -17,7 +17,7 @@ py -3 deploy/offline/make_bundle.py `
   --output 'C:/wellspring-transfer/bundle'
 ```
 
-提前拉取 PostgreSQL 17 摘要镜像。脚本打印 manifest 和独立校验引导工具的摘要；将引导工具 `trusted_verify.py`、它的摘要、manifest 摘要及经审核的步骤通过独立可信渠道交付。引导工具不包含在待验包内。源码未提交改动会进入制品；清单记录实际构建输入摘要及依赖锁摘要。
+提前拉取 PostgreSQL 18 摘要镜像。脚本打印 manifest 和独立校验引导工具的摘要；将引导工具 `trusted_verify.py`、它的摘要、manifest 摘要及经审核的步骤通过独立可信渠道交付。引导工具不包含在待验包内。源码未提交改动会进入制品；清单记录实际构建输入摘要及依赖锁摘要。
 
 ## 2. 先验证可信工具，再验证包
 
@@ -76,7 +76,7 @@ py -3 -I .\backup_restore.py backup --env-file $cfg `
 py -3 -I .\backup_restore.py drill `
   --dump 'C:\wellspring-backup\wellspring.dump' `
   --sha256 '<从受控备份摘要文件核对的64位值>' `
-  --postgres-image wellspring/postgres:17-offline `
+  --postgres-image wellspring/postgres:18-offline `
   --report 'C:\wellspring-backup\restore-drill.json'
 ```
 
