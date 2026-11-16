@@ -12,7 +12,9 @@ async def deployment_headers(request, call_next):
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data:; connect-src 'self'; font-src 'self'; worker-src 'self'; "
+        "img-src 'self' data: blob: https://*.is.autonavi.com https://*.amap.com; "
+        "connect-src 'self' https://*.is.autonavi.com https://*.amap.com; "
+        "font-src 'self'; worker-src 'self'; "
         "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
     )
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
