@@ -13,7 +13,7 @@ const zoom=ref(props.initialView?.zoom??13)
 let map:L.Map|undefined,markers:L.LayerGroup|undefined,resize:ResizeObserver|undefined
 const pending=new Map<HTMLElement,AbortController>()
 let alive=true
-function system():CoordinateSystem{return props.tiles?(props.tileCrs||'WGS84'):'WGS84'}
+function system():CoordinateSystem{return props.tiles?(props.tileCrs||'WGS84'):'GCJ02'}
 function position(row:GeoResource):L.LatLngTuple{const [longitude,latitude]=toMap([row.longitude!,row.latitude!],system());return [latitude,longitude]}
 function coverage(){
   if(!alive||!host.value||!props.tiles)return
@@ -61,25 +61,36 @@ function bounds():[number,number,number,number]|undefined{if(!map)return;const b
 defineExpose({fit,focus,bounds})
 onMounted(()=>{
   const [defaultLongitude,defaultLatitude]=system()==='GCJ02'?[120.301663,31.574729]:fromMap([120.301663,31.574729],'GCJ02')
-  const initial=props.initialView||{longitude:defaultLongitude,latitude:defaultLatitude,zoom:13}
-  map=L.map(host.value!,{zoomControl:false,minZoom:props.minZoom??0,maxZoom:props.maxZoom??20,maxBounds:[[-85,-180],[85,180]],maxBoundsViscosity:1}).setView([initial.latitude,initial.longitude],initial.zoom)
+  const initialPos=props.initialView?toMap([props.initialView.longitude,props.initialView.latitude],system()):[defaultLongitude,defaultLatitude]
+  const initialZoom=props.initialView?.zoom??13
+  map=L.map(host.value!,{zoomControl:false,minZoom:props.minZoom??0,maxZoom:props.maxZoom??20,maxBounds:[[-85,-180],[85,180]],maxBoundsViscosity:1}).setView([initialPos[1],initialPos[0]],initialZoom)
   zoom.value=map.getZoom();map.on('zoomend',()=>{if(map)zoom.value=map.getZoom()})
   L.control.zoom({zoomInTitle:'放大',zoomOutTitle:'缩小'}).addTo(map);L.control.scale({imperial:false}).addTo(map)
   map.attributionControl.setPrefix('');map.on('click',(event:L.LeafletMouseEvent)=>{if(props.selecting){const [longitude,latitude]=fromMap([event.latlng.lng,event.latlng.lat],system());emit('pick',Number(longitude.toFixed(6)),Number(latitude.toFixed(6)))}})
-  const Tiles=L.GridLayer.extend({createTile(coords:L.Coords,done:L.DoneCallback){
-    const canvas=document.createElement('canvas');canvas.width=256;canvas.height=256;grid(canvas,coords)
-    if(!props.tiles){setTimeout(()=>done(undefined,canvas),0);return canvas}
-    const controller=new AbortController();pending.set(canvas,controller)
-    void api<Blob>(`/geography/tiles/${coords.z}/${coords.x}/${coords.y}.png`,{responseType:'blob',signal:controller.signal}).then(async blob=>{
-      const bitmap=await createImageBitmap(blob)
-      try{if(alive&&!controller.signal.aborted){canvas.getContext('2d')?.drawImage(bitmap,0,0,256,256);canvas.dataset.coverage='available'}}finally{bitmap.close()}
-    }).catch(error=>{if(!isCancelled(error)&&alive&&!controller.signal.aborted)canvas.dataset.coverage='missing'}).finally(()=>{pending.delete(canvas);if(alive&&!controller.signal.aborted){done(undefined,canvas);coverage()}})
-    return canvas
-  }})
-  const tiles=new Tiles()
-  L.setOptions(tiles,{tileSize:256,noWrap:true,keepBuffer:1,updateWhenIdle:true})
-  tiles.on('tileunload',(event:L.TileEvent)=>{pending.get(event.tile)?.abort();pending.delete(event.tile)})
-  tiles.addTo(map);markers=L.layerGroup().addTo(map);map.on('moveend',()=>{redraw();coverage()})
+  if(props.tiles){
+    const Tiles=L.GridLayer.extend({createTile(coords:L.Coords,done:L.DoneCallback){
+      const canvas=document.createElement('canvas');canvas.width=256;canvas.height=256;grid(canvas,coords)
+      const controller=new AbortController();pending.set(canvas,controller)
+      void api<Blob>(`/geography/tiles/${coords.z}/${coords.x}/${coords.y}.png`,{responseType:'blob',signal:controller.signal}).then(async blob=>{
+        const bitmap=await createImageBitmap(blob)
+        try{if(alive&&!controller.signal.aborted){canvas.getContext('2d')?.drawImage(bitmap,0,0,256,256);canvas.dataset.coverage='available'}}finally{bitmap.close()}
+      }).catch(error=>{if(!isCancelled(error)&&alive&&!controller.signal.aborted)canvas.dataset.coverage='missing'}).finally(()=>{pending.delete(canvas);if(alive&&!controller.signal.aborted){done(undefined,canvas);coverage()}})
+      return canvas
+    }})
+    const tiles=new Tiles()
+    L.setOptions(tiles,{tileSize:256,noWrap:true,keepBuffer:1,updateWhenIdle:true})
+    tiles.on('tileunload',(event:L.TileEvent)=>{pending.get(event.tile)?.abort();pending.delete(event.tile)})
+    tiles.addTo(map)
+  }else{
+    const onlineTiles=L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',{
+      subdomains:['1','2','3','4'],
+      minZoom:props.minZoom??3,
+      maxZoom:props.maxZoom??18,
+      attribution:'© 高德地图'
+    })
+    onlineTiles.addTo(map)
+  }
+  markers=L.layerGroup().addTo(map);map.on('moveend',()=>{redraw();coverage()})
   resize=new ResizeObserver(()=>map?.invalidateSize());resize.observe(host.value!);redraw()
 })
 watch(()=>props.points,redraw)
